@@ -1,0 +1,69 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Django ────────────────────────────────────────────────
+*.log
+logs/
+db.sqlite3
+db.sqlite3-journal
+db.sqlite3-wal
+db.sqlite3-shm
+local_settings.py
+staticfiles/
+
+# Uploaded model artifacts, baselines and production batches.
+# Never commit these — they are user data and can be large.
+media/
+
+# ── Secrets ───────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Data ──────────────────────────────────────────────────
+# Raw and derived datasets are produced by scripts/prepare_datasets.py.
+# Keep the scripts in git, not the data.
+data/raw/
+data/processed/
+*.parquet
+!docs/**/*.parquet
+
+# Trained demo artifacts are produced by scripts/train_demo_models.py
+artifacts/
+*.pkl
+*.joblib
+
+# ── Testing / tooling ─────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.tox/
+
+# ── Editors ───────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
