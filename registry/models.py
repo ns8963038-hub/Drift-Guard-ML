@@ -52,6 +52,22 @@ class ModelVersion(TimeStampedModel):
     training_accuracy = models.FloatField(null=True, blank=True)
     baseline_prediction_distribution = models.JSONField(null=True, blank=True)
 
+    # TRD §4.2 provenance. file_hash is FR-02.8: every artifact is fingerprinted
+    # at upload, one of the stated mitigations for accepted risk R1, since
+    # pickles execute arbitrary code on load.
+    file_hash = models.CharField(max_length=64, blank=True)
+    file_size = models.BigIntegerField(null=True, blank=True)
+    algorithm_name = models.CharField(max_length=120, blank=True)
+    changelog = models.TextField(blank=True)
+    validation_message = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_versions",
+    )
+
     class Meta:
         ordering = ["-version_number"]
         unique_together = ("ml_model", "version_number")

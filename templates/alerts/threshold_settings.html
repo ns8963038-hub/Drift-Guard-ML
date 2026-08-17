@@ -1,50 +1,89 @@
 {% extends "registry/model_tab_shell.html" %}
-
 {% block tab_content %}
-<div class="card" style="max-width: 650px; margin: 0 auto;">
-    <h3>Threshold Profile Configuration</h3>
-    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;">
-        Configure detection sensitivity thresholds for {{ ml_model.name }}.
+<div class="card">
+  <h2>Threshold profile — {{ ml_model.name }}</h2>
+  <p class="muted">
+    Every monitoring run stores a snapshot of these values, so changing them here
+    never alters a result that has already been recorded.
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <h3>Drift bands</h3>
+    <p class="muted">
+      Each measure needs two thresholds. Below <em>moderate</em> is 🟢 no drift,
+      between the two is 🟡 moderate, above <em>high</em> is 🔴 high.
     </p>
+    <div class="grid-2">
+      <label>PSI — moderate above
+        <input type="number" step="0.01" min="0" name="psi_moderate" value="{{ profile.psi_moderate }}" required>
+      </label>
+      <label>PSI — high above
+        <input type="number" step="0.01" min="0" name="psi_high" value="{{ profile.psi_high }}" required>
+      </label>
+      <label>JSD — moderate above
+        <input type="number" step="0.01" min="0" max="1" name="jsd_moderate" value="{{ profile.jsd_moderate }}" required>
+      </label>
+      <label>JSD — high above
+        <input type="number" step="0.01" min="0" max="1" name="jsd_high" value="{{ profile.jsd_high }}" required>
+      </label>
+    </div>
 
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
-            {% endfor %}
-        </div>
-    {% endif %}
+    <h3>Significance and roll-up</h3>
+    <div class="grid-2">
+      <label>Significance level (α)
+        <input type="number" step="0.01" min="0" max="1" name="alpha" value="{{ profile.alpha }}" required>
+      </label>
+      <label>Minimum rows per feature
+        <input type="number" step="1" min="1" name="min_samples" value="{{ profile.min_samples }}" required>
+      </label>
+      <label>Share of moderate features that counts as high
+        <input type="number" step="0.05" min="0" max="1" name="moderate_ratio_for_high" value="{{ profile.moderate_ratio_for_high }}" required>
+      </label>
+    </div>
 
-    <form method="post" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-        {% csrf_token %}
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">KS p-value Threshold</label>
-                <input type="number" step="0.01" name="ks_p_value_threshold" value="{{ profile.ks_p_value_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Chi2 p-value Threshold</label>
-                <input type="number" step="0.01" name="chi2_p_value_threshold" value="{{ profile.chi2_p_value_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">PSI Threshold</label>
-                <input type="number" step="0.05" name="psi_threshold" value="{{ profile.psi_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">JS Divergence Threshold</label>
-                <input type="number" step="0.05" name="js_threshold" value="{{ profile.js_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Accuracy Drop Threshold</label>
-                <input type="number" step="0.01" name="accuracy_drop_threshold" value="{{ profile.accuracy_drop_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-            <div>
-                <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Health Warning (0-100)</label>
-                <input type="number" name="health_warning_threshold" value="{{ profile.health_warning_threshold }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-            </div>
-        </div>
+    <h3>Data quality</h3>
+    <div class="grid-2">
+      <label>Missing value rate
+        <input type="number" step="0.01" min="0" max="1" name="missing_value_rate_threshold" value="{{ profile.missing_value_rate_threshold }}" required>
+      </label>
+      <label>Duplicate row rate
+        <input type="number" step="0.01" min="0" max="1" name="duplicate_row_rate_threshold" value="{{ profile.duplicate_row_rate_threshold }}" required>
+      </label>
+      <label>Outlier rate
+        <input type="number" step="0.01" min="0" max="1" name="outlier_rate_threshold" value="{{ profile.outlier_rate_threshold }}" required>
+      </label>
+    </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Save Threshold Profile</button>
-    </form>
+    <h3>Performance and health</h3>
+    <div class="grid-2">
+      <label>Accuracy drop — warning
+        <input type="number" step="0.01" min="0" max="1" name="accuracy_drop_minor" value="{{ profile.accuracy_drop_minor }}" required>
+      </label>
+      <label>Accuracy drop — critical
+        <input type="number" step="0.01" min="0" max="1" name="accuracy_drop_major" value="{{ profile.accuracy_drop_major }}" required>
+      </label>
+      <label>Health score — healthy at or above
+        <input type="number" step="1" min="0" max="100" name="health_warning_threshold" value="{{ profile.health_warning_threshold }}" required>
+      </label>
+      <label>Health score — critical below
+        <input type="number" step="1" min="0" max="100" name="health_critical_threshold" value="{{ profile.health_critical_threshold }}" required>
+      </label>
+    </div>
+
+    <h3>Alerting</h3>
+    <div class="grid-2">
+      <label>Deduplication cooldown (minutes)
+        <input type="number" step="1" min="0" name="alert_cooldown_minutes" value="{{ profile.alert_cooldown_minutes }}" required>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="email_enabled" {% if profile.email_enabled %}checked{% endif %}>
+        Send email for critical alerts
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save thresholds</button>
+  </form>
 </div>
 {% endblock %}

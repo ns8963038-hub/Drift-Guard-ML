@@ -11,50 +11,60 @@ from core.constants import (
 
 
 def resolve_thresholds(ml_model):
-    """
-    Contract C14: Resolves threshold profile in order:
-    1. Model-specific profile
-    2. Global profile (ml_model is None)
-    3. Default code thresholds
-    """
-    defaults = {
-        "ks_p_value_threshold": 0.05,
-        "chi2_p_value_threshold": 0.05,
-        "psi_threshold": 0.2,
-        "js_threshold": 0.1,
-        "missing_value_rate_threshold": 0.05,
-        "duplicate_row_rate_threshold": 0.01,
-        "outlier_rate_threshold": 0.05,
-        "accuracy_drop_threshold": 0.05,
-        "health_warning_threshold": 70,
-        "health_critical_threshold": 50,
-    }
+    """Contract C14. Resolution order: model profile -> global profile -> code.
 
+    The returned dict is consumed directly by ``monitoring.engine`` and by the
+    §9.1 alert rules, so the keys must match
+    ``monitoring.engine.drift.default_thresholds()`` exactly. The engine cannot
+    import Django and has no way to translate names; a mismatch surfaces as a
+    KeyError on the first monitoring run rather than at startup.
+
+    Every run stores a snapshot of what this returned (PRD FR-13.4), which is
+    what makes history immutable when someone later edits a threshold.
+    """
     profile = None
-    if ml_model and hasattr(ml_model, "threshold_profile"):
-        try:
-            profile = ml_model.threshold_profile
-        except ThresholdProfile.DoesNotExist:
-            profile = None
-
-    if not profile:
+    if ml_model is not None:
+        profile = ThresholdProfile.objects.filter(ml_model=ml_model).first()
+    if profile is None:
         profile = ThresholdProfile.objects.filter(ml_model__isnull=True).first()
 
-    if not profile:
+    if profile is None:
+        # No profile stored at all — fall back to the engine's own defaults so a
+        # fresh install still runs. Imported lazily: alerts/ is loaded during
+        # app registry population, and the engine pulls in scipy.
+        from monitoring.engine import drift
+
+        defaults = drift.default_thresholds()
+        defaults.update(
+            {
+                "missing_value_rate_threshold": 0.05,
+                "duplicate_row_rate_threshold": 0.01,
+                "outlier_rate_threshold": 0.05,
+                "accuracy_drop_minor": 0.05,
+                "accuracy_drop_major": 0.10,
+                "health_warning_threshold": 80,
+                "health_critical_threshold": 60,
+                "alert_cooldown_minutes": 60,
+                "email_enabled": False,
+            }
+        )
         return defaults
 
-    return {
-        "ks_p_value_threshold": profile.ks_p_value_threshold,
-        "chi2_p_value_threshold": profile.chi2_p_value_threshold,
-        "psi_threshold": profile.psi_threshold,
-        "js_threshold": profile.js_threshold,
-        "missing_value_rate_threshold": profile.missing_value_rate_threshold,
-        "duplicate_row_rate_threshold": profile.duplicate_row_rate_threshold,
-        "outlier_rate_threshold": profile.outlier_rate_threshold,
-        "accuracy_drop_threshold": profile.accuracy_drop_threshold,
-        "health_warning_threshold": profile.health_warning_threshold,
-        "health_critical_threshold": profile.health_critical_threshold,
-    }
+    resolved = profile.as_engine_dict()
+    resolved.update(
+        {
+            "missing_value_rate_threshold": profile.missing_value_rate_threshold,
+            "duplicate_row_rate_threshold": profile.duplicate_row_rate_threshold,
+            "outlier_rate_threshold": profile.outlier_rate_threshold,
+            "accuracy_drop_minor": profile.accuracy_drop_minor,
+            "accuracy_drop_major": profile.accuracy_drop_major,
+            "health_warning_threshold": profile.health_warning_threshold,
+            "health_critical_threshold": profile.health_critical_threshold,
+            "alert_cooldown_minutes": profile.alert_cooldown_minutes,
+            "email_enabled": profile.email_enabled,
+        }
+    )
+    return resolved
 
 
 def create_or_update_alert(

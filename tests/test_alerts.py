@@ -18,20 +18,46 @@ def test_threshold_resolution_fallback():
         owner=user,
     )
 
-    # 1. Defaults fallback
+    # 1. Defaults fallback — PRD §7.2 bands and §8.4 health bands
     res = resolve_thresholds(model)
-    assert res["ks_p_value_threshold"] == 0.05
-    assert res["health_warning_threshold"] == 70
+    assert res["alpha"] == 0.05
+    assert res["psi_moderate"] == 0.10
+    assert res["psi_high"] == 0.25
+    assert res["health_warning_threshold"] == 80
+    assert res["health_critical_threshold"] == 60
 
     # 2. Global profile fallback
-    ThresholdProfile.objects.create(ml_model=None, ks_p_value_threshold=0.01)
-    res_global = resolve_thresholds(model)
-    assert res_global["ks_p_value_threshold"] == 0.01
+    ThresholdProfile.objects.create(ml_model=None, alpha=0.01)
+    assert resolve_thresholds(model)["alpha"] == 0.01
 
     # 3. Model-specific profile override
-    ThresholdProfile.objects.create(ml_model=model, ks_p_value_threshold=0.001)
-    res_model = resolve_thresholds(model)
-    assert res_model["ks_p_value_threshold"] == 0.001
+    ThresholdProfile.objects.create(ml_model=model, alpha=0.001)
+    assert resolve_thresholds(model)["alpha"] == 0.001
+
+
+@pytest.mark.django_db
+def test_resolved_thresholds_satisfy_the_engine_contract():
+    """Contract C14 — the engine reads this dict directly and cannot translate.
+
+    The two halves previously shared zero keys, so wiring the pipeline to
+    resolve_thresholds() would have raised KeyError on the first monitoring run.
+    """
+    from monitoring.engine import drift
+
+    resolved = resolve_thresholds(None)
+    required = set(drift.default_thresholds())
+    missing = required - set(resolved)
+    assert not missing, f"engine keys absent from resolve_thresholds(): {missing}"
+
+
+@pytest.mark.django_db
+def test_moderate_band_sits_below_high_band():
+    """Without this ordering the amber 🟡 state is unreachable, and the
+    🟢→🟡→🔴 progression the client's brief asks for cannot happen."""
+    resolved = resolve_thresholds(None)
+    assert resolved["psi_moderate"] < resolved["psi_high"]
+    assert resolved["jsd_moderate"] < resolved["jsd_high"]
+    assert resolved["health_critical_threshold"] < resolved["health_warning_threshold"]
 
 
 @pytest.mark.django_db

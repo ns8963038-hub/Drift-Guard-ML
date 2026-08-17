@@ -91,32 +91,54 @@ def threshold_settings_view(request, slug):
     profile, _ = ThresholdProfile.objects.get_or_create(ml_model=ml_model)
 
     if request.method == "POST":
-        profile.ks_p_value_threshold = float(
-            request.POST.get("ks_p_value_threshold", 0.05)
+
+        def number(field, default, cast=float):
+            try:
+                return cast(request.POST.get(field, default))
+            except (TypeError, ValueError):
+                return cast(default)
+
+        profile.psi_moderate = number("psi_moderate", 0.10)
+        profile.psi_high = number("psi_high", 0.25)
+        profile.jsd_moderate = number("jsd_moderate", 0.10)
+        profile.jsd_high = number("jsd_high", 0.20)
+        profile.alpha = number("alpha", 0.05)
+        profile.moderate_ratio_for_high = number("moderate_ratio_for_high", 0.30)
+        profile.min_samples = number("min_samples", 30, int)
+        profile.missing_value_rate_threshold = number(
+            "missing_value_rate_threshold", 0.05
         )
-        profile.chi2_p_value_threshold = float(
-            request.POST.get("chi2_p_value_threshold", 0.05)
+        profile.duplicate_row_rate_threshold = number(
+            "duplicate_row_rate_threshold", 0.01
         )
-        profile.psi_threshold = float(request.POST.get("psi_threshold", 0.2))
-        profile.js_threshold = float(request.POST.get("js_threshold", 0.1))
-        profile.missing_value_rate_threshold = float(
-            request.POST.get("missing_value_rate_threshold", 0.05)
-        )
-        profile.duplicate_row_rate_threshold = float(
-            request.POST.get("duplicate_row_rate_threshold", 0.01)
-        )
-        profile.outlier_rate_threshold = float(
-            request.POST.get("outlier_rate_threshold", 0.05)
-        )
-        profile.accuracy_drop_threshold = float(
-            request.POST.get("accuracy_drop_threshold", 0.05)
-        )
-        profile.health_warning_threshold = int(
-            request.POST.get("health_warning_threshold", 70)
-        )
-        profile.health_critical_threshold = int(
-            request.POST.get("health_critical_threshold", 50)
-        )
+        profile.outlier_rate_threshold = number("outlier_rate_threshold", 0.05)
+        profile.accuracy_drop_minor = number("accuracy_drop_minor", 0.05)
+        profile.accuracy_drop_major = number("accuracy_drop_major", 0.10)
+        profile.health_warning_threshold = number("health_warning_threshold", 80, int)
+        profile.health_critical_threshold = number("health_critical_threshold", 60, int)
+        profile.alert_cooldown_minutes = number("alert_cooldown_minutes", 60, int)
+        profile.email_enabled = request.POST.get("email_enabled") == "on"
+
+        # A moderate band above its high band would make MODERATE unreachable,
+        # which is exactly the failure this whole two-band structure exists to
+        # prevent. Reject rather than silently store it.
+        if (
+            profile.psi_moderate >= profile.psi_high
+            or profile.jsd_moderate >= profile.jsd_high
+        ):
+            messages.error(
+                request,
+                "The moderate threshold must be below the high threshold for both "
+                "PSI and JSD, otherwise no batch can ever be reported as moderate.",
+            )
+            return redirect("alerts:thresholds", slug=ml_model.slug)
+        if profile.health_critical_threshold >= profile.health_warning_threshold:
+            messages.error(
+                request,
+                "The critical health score must be below the warning score.",
+            )
+            return redirect("alerts:thresholds", slug=ml_model.slug)
+
         profile.save()
         messages.success(request, f"Threshold profile updated for {ml_model.name}.")
         return redirect("alerts:thresholds", slug=ml_model.slug)

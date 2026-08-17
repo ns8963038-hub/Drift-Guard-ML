@@ -5,6 +5,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 
 from registry.models import ModelVersion, ModelAuditLog
+from core.validators import compute_sha256
 from core.constants import (
     VersionStatus,
     ValidationStatus,
@@ -76,13 +77,23 @@ def validate_model_artifact(artifact_file, ml_model):
 
 
 @transaction.atomic
-def create_model_version(ml_model, artifact_file, label=None, user=None):
+def create_model_version(
+    ml_model, artifact_file, label=None, user=None, changelog="", training_accuracy=None
+):
     """
     Validates artifact and creates a new ModelVersion row.
     If validation fails, raises ValidationError and creates NO database row.
     """
     # Run 5-check validation gate
     validate_model_artifact(artifact_file, ml_model)
+
+    # FR-02.8: fingerprint and size are recorded for every artifact. The hash is
+    # one of the stated mitigations for accepted risk R1 — uploaded pickles
+    # execute code on load, so being able to prove which bytes were loaded
+    # matters. Computed after validation so a rejected file leaves no trace.
+    file_hash = compute_sha256(artifact_file)
+    file_size = artifact_file.size
+    algorithm_name = _detect_algorithm(artifact_file)
 
     # Calculate next version number
     last_version = ml_model.versions.order_by("-version_number").first()
@@ -96,6 +107,13 @@ def create_model_version(ml_model, artifact_file, label=None, user=None):
         artifact=artifact_file,
         status=VersionStatus.INACTIVE,
         validation_status=ValidationStatus.PASSED,
+        validation_message="All five checks passed.",
+        file_hash=file_hash,
+        file_size=file_size,
+        algorithm_name=algorithm_name,
+        changelog=changelog,
+        training_accuracy=training_accuracy,
+        uploaded_by=user,
     )
 
     # Audit log
@@ -136,3 +154,22 @@ def activate_version(version, user=None):
         details={"version_id": version.id, "label": version.label},
     )
     return version
+
+
+def _detect_algorithm(artifact_file):
+    """Best-effort estimator name for display, e.g. "RandomForestClassifier".
+
+    Never raises: this is a label on a screen, and an artifact that has already
+    passed the validation gate must not be rejected because we could not name it.
+    """
+    try:
+        import joblib
+
+        artifact_file.seek(0)
+        model = joblib.load(artifact_file)
+        artifact_file.seek(0)
+        if hasattr(model, "steps"):  # sklearn Pipeline — name the final step
+            return type(model.steps[-1][1]).__name__
+        return type(model).__name__
+    except Exception:
+        return ""
