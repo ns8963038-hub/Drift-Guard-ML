@@ -126,6 +126,11 @@ def stability_component(
     return _clamp(100.0 - STABILITY_MULTIPLIER * divergence)
 
 
+# §8.4a — the coherence cap. A run whose overall drift status is HIGH can never
+# be reported as HEALTHY, whatever the arithmetic says.
+HIGH_DRIFT_SCORE_CEILING = 79
+
+
 def band(score: int | float) -> str:
     """§8.4."""
     if score >= HEALTHY_MINIMUM:
@@ -133,6 +138,27 @@ def band(score: int | float) -> str:
     if score >= WARNING_MINIMUM:
         return WARNING
     return CRITICAL
+
+
+def apply_coherence_cap(score: int, overall_drift_status: str | None) -> int:
+    """§8.4a. Stop the score contradicting the rest of the run.
+
+    The weighted formula can return a HEALTHY score while several features sit
+    at HIGH drift, because drift carries only 30 of the 100 weight. Observed in
+    practice: 3 of 19 features at HIGH drift with accuracy down 4 points scored
+    81 — so the run detail page would show a red drift badge beside a green
+    health badge, and an URGENT retraining recommendation beside "HEALTHY".
+
+    HIGH drift is a CRITICAL-tier retraining trigger (§10). A score that calls
+    that healthy is not a summary, it is a contradiction — and the health score
+    exists precisely so one glance is enough (goal G3).
+
+    MODERATE drift is deliberately not capped. It is a warning worth weighing
+    against the other components, not an override.
+    """
+    if overall_drift_status == "HIGH":
+        return min(score, HIGH_DRIFT_SCORE_CEILING)
+    return score
 
 
 def compute(
@@ -145,6 +171,7 @@ def compute(
     baseline_prediction_distribution: dict[str, float] | None,
     current_prediction_distribution: dict[str, float] | None,
     labels_available: bool,
+    overall_drift_status: str | None = None,
 ) -> dict[str, Any]:
     """Compute the health score and its full breakdown.
 
@@ -173,10 +200,13 @@ def compute(
     total_weight = sum(active.values())
 
     weighted = sum(components[name] * weight for name, weight in active.items())
-    score = int(round(weighted / total_weight)) if total_weight else 0
+    raw_score = int(round(weighted / total_weight)) if total_weight else 0
+    score = apply_coherence_cap(raw_score, overall_drift_status)
 
     return {
         "score": score,
+        "raw_score": raw_score,
+        "capped": score != raw_score,
         "band": band(score),
         "components": {
             name: (None if value is None else round(float(value), 2))

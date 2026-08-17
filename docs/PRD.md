@@ -495,6 +495,33 @@ The UI always states which weighting was applied (FR-09.5).
 | WARNING | 60 – 79 | 🟡 |
 | CRITICAL | 0 – 59 | 🔴 |
 
+### 8.4a Coherence cap
+
+```
+if run.overall_drift_status == HIGH:
+    health = min(health, 79)     # can never be reported as HEALTHY
+```
+
+**Why this exists.** Drift carries only 30 of the 100 weight, so the plain
+weighted formula can return a HEALTHY score while several features sit at HIGH
+drift. Measured on real Telco data during implementation: 3 of 19 features at
+`HIGH`, accuracy down 4 points, quality 87 → **score 81, band HEALTHY**.
+
+That result is self-contradictory in the UI. The run detail page (S13) shows the
+drift badge and the health badge side by side, so it would display 🔴 High Drift
+next to 🟢 Healthy — while §10 simultaneously raises an **URGENT** retraining
+recommendation, because `HIGH` drift is a CRITICAL-tier trigger.
+
+The health score exists so that one glance is enough (goal G3). A number that
+disagrees with everything beside it fails that purpose, so the band is capped.
+
+`MODERATE` drift is deliberately **not** capped — it is a signal to weigh against
+the other components, not an override.
+
+Both numbers are stored and displayed: `raw_score` (the uncapped formula result)
+and `score` (after the cap), plus a `capped` flag. The cap is auditable rather
+than invisible.
+
 ### 8.5 Data quality score
 
 ```

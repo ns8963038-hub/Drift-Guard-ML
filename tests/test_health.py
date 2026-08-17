@@ -236,3 +236,62 @@ def test_critical_band_is_reachable():
     )
     assert result["band"] == health.CRITICAL
     assert result["score"] < 60
+
+
+# ──────────────────────────────────────────────────────────────────────
+# §8.4a — the coherence cap
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_high_drift_cannot_be_reported_as_healthy():
+    """The contradiction this rule exists to prevent.
+
+    Observed on real Telco data: 3 of 19 features at HIGH drift with accuracy
+    down 4 points scored 81 under the plain weighted formula. The run page would
+    then show a red drift badge beside a green health badge, and an URGENT
+    retraining recommendation beside the word HEALTHY.
+    """
+    result = score(
+        high_count=3,
+        current_accuracy=0.71,
+        reference_accuracy=0.7523,
+        quality_score=87.0,
+        overall_drift_status="HIGH",
+    )
+
+    assert result["raw_score"] >= 80, "the plain formula really does say healthy here"
+    assert result["score"] == health.HIGH_DRIFT_SCORE_CEILING
+    assert result["band"] == health.WARNING
+    assert result["capped"] is True
+
+
+def test_cap_never_raises_a_low_score():
+    result = score(
+        high_count=8,
+        current_accuracy=0.40,
+        quality_score=30.0,
+        overall_drift_status="HIGH",
+    )
+    assert result["score"] == result["raw_score"]
+    assert result["capped"] is False
+    assert result["band"] == health.CRITICAL
+
+
+def test_moderate_drift_is_not_capped():
+    """MODERATE is a warning to weigh, not an override."""
+    result = score(moderate_count=2, overall_drift_status="MODERATE")
+    assert result["capped"] is False
+    assert result["band"] == health.HEALTHY
+
+
+def test_no_drift_status_supplied_leaves_the_score_alone():
+    """Callers that do not pass a drift status get the plain formula."""
+    result = score(high_count=3, quality_score=87.0)
+    assert result["capped"] is False
+
+
+def test_raw_score_is_always_reported():
+    """The uncapped number stays visible so the cap is auditable, not magic."""
+    result = score(high_count=3, quality_score=87.0, overall_drift_status="HIGH")
+    assert "raw_score" in result
+    assert result["raw_score"] != result["score"]
