@@ -51,7 +51,11 @@ def downsample(values, max_points=MAX_POINTS):
 def _runs_for(request, ml_model):
     """Completed runs for a model within the requested range, oldest first."""
     window = RANGES.get(request.GET.get("range", "30d"), 30)
-    queryset = ml_model.runs.filter(status=RunStatus.COMPLETED)
+    # select_related on the 1:1 children: without it every chart endpoint issues
+    # one extra query per run, so a model with 500 runs costs 500 queries.
+    queryset = ml_model.runs.filter(status=RunStatus.COMPLETED).select_related(
+        "performance", "quality"
+    )
     if window is not None:
         queryset = queryset.filter(
             created_at__gte=timezone.now() - timedelta(days=window)
@@ -194,15 +198,17 @@ def chart_drift_api(request, slug):
     ml_model = _model_or_404(request, slug)
     runs = _runs_for(request, ml_model)
 
-    max_psi = []
-    for run in runs:
-        worst = (
-            FeatureDriftResult.objects.filter(run=run, psi__isnull=False)
-            .order_by("-psi")
-            .values_list("psi", flat=True)
-            .first()
-        )
-        max_psi.append(round(worst, 4) if worst is not None else None)
+    # One aggregate for every run, rather than a query per run.
+    from django.db.models import Max
+
+    worst_by_run = dict(
+        FeatureDriftResult.objects.filter(run__in=runs, psi__isnull=False)
+        .values_list("run_id")
+        .annotate(worst=Max("psi"))
+    )
+    max_psi = [
+        round(worst_by_run[r.pk], 4) if r.pk in worst_by_run else None for r in runs
+    ]
 
     return JsonResponse(
         {

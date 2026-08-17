@@ -321,9 +321,11 @@ def monitoring_history_view(request, slug):
     from django.core.paginator import Paginator
 
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    runs = ml_model.runs.select_related("model_version", "data_batch").order_by(
-        "-created_at"
-    )
+    # quality and performance are reverse one-to-ones the template reads on every
+    # row. Without them here, a 25-row page issues 25 extra queries.
+    runs = ml_model.runs.select_related(
+        "model_version", "data_batch", "quality", "performance"
+    ).order_by("-created_at")
 
     filters = {
         "status": request.GET.get("status", ""),

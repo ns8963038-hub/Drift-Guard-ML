@@ -10,6 +10,8 @@ from __future__ import annotations
 import atexit
 import logging
 import os
+import sys
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -23,6 +25,25 @@ _scheduler: BackgroundScheduler | None = None
 
 def get_scheduler() -> BackgroundScheduler | None:
     return _scheduler
+
+
+def _is_autoreload_parent() -> bool:
+    """True only in the reloader's supervising process.
+
+    Django's autoreloader runs the app in two processes and sets RUN_MAIN=true
+    in the child. Starting a scheduler in both means every scenario ticks twice.
+
+    Checking ``RUN_MAIN != "true"`` alone is wrong, and was: ``runserver
+    --noreload`` never sets RUN_MAIN either, and neither does gunicorn — so that
+    test silently disabled the scheduler in exactly the way the README tells
+    people to run the project. The reloader has to be in use *and* this has to be
+    the parent.
+    """
+    if "runserver" not in sys.argv:
+        return False  # gunicorn, a management command, a shell
+    if "--noreload" in sys.argv:
+        return False  # single process; this is the one that runs
+    return os.environ.get("RUN_MAIN") != "true"
 
 
 def start_scheduler():
@@ -42,8 +63,8 @@ def start_scheduler():
     if _scheduler is not None:
         return _scheduler
 
-    if settings.DEBUG and os.environ.get("RUN_MAIN") != "true":
-        # The reloader's parent process. The child will start the real one.
+    if _is_autoreload_parent():
+        # The reloader's supervising process. Its child starts the real one.
         return None
 
     _scheduler = BackgroundScheduler(timezone=str(settings.TIME_ZONE))
@@ -52,12 +73,35 @@ def start_scheduler():
 
     _register_maintenance_jobs()
 
-    from simulator.services import resume_running_scenarios
-
-    resume_running_scenarios()
+    # Resuming scenarios reads the database, and AppConfig.ready() runs before
+    # migrations have necessarily been applied — on a fresh clone the table does
+    # not exist yet, and Django warns about querying at startup regardless. So it
+    # is deferred a few seconds onto the scheduler's own thread, by which point
+    # the app is fully initialised.
+    _scheduler.add_job(
+        _guarded(_resume_scenarios, "resume_scenarios"),
+        trigger="date",
+        run_date=datetime.now() + timedelta(seconds=5),
+        id="resume_scenarios",
+        replace_existing=True,
+    )
 
     logger.info("scheduler started")
     return _scheduler
+
+
+def _resume_scenarios():
+    """Re-schedule scenarios that were running when the process last stopped."""
+    from django.db import OperationalError, ProgrammingError
+
+    from simulator.services import resume_running_scenarios
+
+    try:
+        resume_running_scenarios()
+    except (OperationalError, ProgrammingError):
+        # Tables not migrated yet. Nothing to resume, and this must never stop
+        # the site from serving.
+        logger.info("scenario table not ready; nothing resumed")
 
 
 def shutdown_scheduler():

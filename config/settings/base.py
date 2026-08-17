@@ -66,12 +66,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# DATABASE_URL makes the PRD NFR-13 claim real: moving to PostgreSQL or MySQL is
+# a settings change, not a code change, because every query goes through the ORM.
+# Defaults to SQLite so a demo machine needs no database server.
+import environ  # noqa: E402
+
+_env = environ.Env()
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": _env.db_url(
+        "DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
+    )
 }
+
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -117,3 +123,53 @@ SIMULATOR_DEFAULT_INTERVAL_SECONDS = int(
     os.getenv("SIMULATOR_DEFAULT_INTERVAL_SECONDS", "30")
 )
 BATCH_FILE_RETENTION_DAYS = int(os.getenv("BATCH_FILE_RETENTION_DAYS", "30"))
+
+
+# ── Logging — TRD §12 ─────────────────────────────────────────────────
+# Without this, a failed monitoring run's traceback and every scheduler error
+# go nowhere. Those are precisely the events you need to see when something
+# misbehaves during a demo, and they happen on a background thread where
+# nobody is watching the console.
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "{asctime} {levelname:<8} {name:<24} {message}",
+            "style": "{",
+        },
+        "brief": {"format": "{levelname} {message}", "style": "{"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "brief",
+            "level": "INFO",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "driftguard.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "standard",
+            "level": "INFO",
+        },
+    },
+    "loggers": {
+        # The named loggers the application writes to.
+        "driftguard": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+    "root": {"handlers": ["file"], "level": "WARNING"},
+}

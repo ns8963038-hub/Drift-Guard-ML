@@ -198,3 +198,45 @@ def test_analyst_cannot_manage_scenarios(client, scenario):
         assert response.status_code in (403, 404)
     except PermissionDenied:
         pass
+
+
+# ──────────────────────────────────────────────────────────────────────
+# The autoreload guard — regression test
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "argv,run_main,should_skip,why",
+    [
+        (["manage.py", "runserver"], None, True, "reloader parent"),
+        (["manage.py", "runserver"], "true", False, "reloader child"),
+        (["manage.py", "runserver", "--noreload"], None, False, "single process"),
+        (["manage.py", "runserver", "--noreload"], "true", False, "single process"),
+        (["gunicorn", "config.wsgi"], None, False, "gunicorn worker"),
+        (["manage.py", "shell"], None, False, "management command"),
+    ],
+)
+def test_scheduler_starts_in_exactly_the_right_processes(
+    monkeypatch, argv, run_main, should_skip, why
+):
+    """Regression: `runserver --noreload` silently disabled the scheduler.
+
+    The original guard was `RUN_MAIN != "true"`, which is true in the reloader
+    parent — but also true under `--noreload` and under gunicorn, neither of
+    which set RUN_MAIN. So the scheduler never started in exactly the way the
+    README tells people to run the project, and nothing indicated it: the site
+    served normally, scenarios showed as RUNNING, and no batch ever arrived.
+
+    The guard must skip in one case only: the reloader's supervising process.
+    """
+    import sys
+
+    from simulator import scheduler
+
+    monkeypatch.setattr(sys, "argv", argv)
+    if run_main is None:
+        monkeypatch.delenv("RUN_MAIN", raising=False)
+    else:
+        monkeypatch.setenv("RUN_MAIN", run_main)
+
+    assert scheduler._is_autoreload_parent() is should_skip, why
