@@ -1,0 +1,68 @@
+{% extends "registry/model_tab_shell.html" %}
+
+{% block tab_content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>Feature & Distribution Drift</h3>
+        <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary" style="font-size: 0.8rem;">24h</button>
+            <button class="btn btn-primary" style="font-size: 0.8rem;">7d</button>
+            <button class="btn btn-secondary" style="font-size: 0.8rem;">30d</button>
+            <button class="btn btn-secondary" style="font-size: 0.8rem;">All</button>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+        <div class="card" style="margin-bottom: 0;">
+            <h4>Drift Metrics Over Time (KS, Chi2, PSI)</h4>
+            <div class="chart-container" style="display: flex; justify-content: center; align-items: center; background: var(--bg-primary); border-radius: 0.5rem; margin-top: 1rem;">
+                <p style="color: var(--text-secondary); font-size: 0.875rem;">📈 [Chart.js: Drift Metrics API endpoint loaded]</p>
+            </div>
+            <div class="table-disclosure">
+                <details>
+                    <summary style="cursor: pointer; color: var(--accent-primary);">View as table</summary>
+                    <table style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.8rem;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                                <th>Timestamp</th>
+                                <th>KS p-val</th>
+                                <th>Chi2 p-val</th>
+                                <th>PSI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>2026-08-17 12:00</td><td>0.045</td><td>0.032</td><td>0.082</td></tr>
+                            <tr><td>2026-08-17 06:00</td><td>0.048</td><td>0.035</td><td>0.075</td></tr>
+                        </tbody>
+                    </table>
+                </details>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 0;">
+            <h4>Prediction Distribution Comparison</h4>
+            <div class="chart-container" style="display: flex; justify-content: center; align-items: center; background: var(--bg-primary); border-radius: 0.5rem; margin-top: 1rem;">
+                <p style="color: var(--text-secondary); font-size: 0.875rem;">📊 [Chart.js: Baseline vs Production distribution endpoint loaded]</p>
+            </div>
+            <div class="table-disclosure">
+                <details>
+                    <summary style="cursor: pointer; color: var(--accent-primary);">View as table</summary>
+                    <table style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.8rem;">
+                        <thead>
+                            <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                                <th>Class</th>
+                                <th>Baseline</th>
+                                <th>Production</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>No (0)</td><td>73.0%</td><td>65.0%</td></tr>
+                            <tr><td>Yes (1)</td><td>27.0%</td><td>35.0%</td></tr>
+                        </tbody>
+                    </table>
+                </details>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

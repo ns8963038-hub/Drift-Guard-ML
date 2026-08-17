@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block header_title %}Dashboard ({{ user.get_role_display }}){% endblock %}
+
+{% block content %}
+<!-- Top Metrics Overview Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+    <div class="card" style="margin-bottom: 0;">
+        <div style="color: var(--text-secondary); font-size: 0.875rem;">Monitored Models</div>
+        <div style="font-size: 2rem; font-weight: 700; margin-top: 0.25rem;">{{ total_models }}</div>
+    </div>
+    <div class="card" style="margin-bottom: 0;">
+        <div style="color: var(--text-secondary); font-size: 0.875rem;">Active Unresolved Alerts</div>
+        <div style="font-size: 2rem; font-weight: 700; color: var(--color-warning); margin-top: 0.25rem;">{{ active_alerts_count }}</div>
+    </div>
+    <div class="card" style="margin-bottom: 0;">
+        <div style="color: var(--text-secondary); font-size: 0.875rem;">Open Retrain Recommendations</div>
+        <div style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.25rem;">{{ open_recommendations_count }}</div>
+    </div>
+    {% if total_users %}
+        <div class="card" style="margin-bottom: 0;">
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Registered Users</div>
+            <div style="font-size: 2rem; font-weight: 700; margin-top: 0.25rem;">{{ total_users }}</div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Composition Content per Role -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
+    <div>
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3>Recent Monitored Models</h3>
+                <a href="{% url 'registry:list' %}" style="font-size: 0.875rem;">View All Models &rarr;</a>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                {% for m in models %}
+                    <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="font-size: 1rem;"><a href="{% url 'registry:overview' m.slug %}">{{ m.name }}</a></h4>
+                            <p style="color: var(--text-secondary); font-size: 0.8rem;">Target: {{ m.target_column }} · Type: {{ m.get_problem_type_display }}</p>
+                        </div>
+                        <span class="badge badge-healthy">HEALTHY</span>
+                    </div>
+                {% empty %}
+                    <p style="color: var(--text-secondary);">No models registered yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3>Active Alerts</h3>
+                <a href="{% url 'alerts:list' %}" style="font-size: 0.875rem;">View All &rarr;</a>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                {% for a in alerts %}
+                    <div style="padding: 0.75rem; border-left: 3px solid var(--color-warning); background-color: var(--bg-primary); border-radius: 0.25rem;">
+                        <div style="font-weight: 600; font-size: 0.875rem;"><a href="{% url 'alerts:detail' a.id %}">{{ a.headline }}</a></div>
+                        <div style="color: var(--text-secondary); font-size: 0.75rem;">{{ a.ml_model.name }} · {{ a.last_seen_at|date:"H:i" }}</div>
+                    </div>
+                {% empty %}
+                    <p style="color: var(--text-secondary);">No active alerts.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

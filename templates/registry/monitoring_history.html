@@ -1,0 +1,62 @@
+{% extends "registry/model_tab_shell.html" %}
+
+{% block tab_content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>Monitoring Execution History</h3>
+        <a href="{% url 'registry:history_export' ml_model.slug %}" class="btn btn-secondary">📥 Export CSV</a>
+    </div>
+
+    <!-- Filters -->
+    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        <select class="btn btn-secondary">
+            <option>All Run Statuses</option>
+            <option>Completed</option>
+            <option>Failed</option>
+        </select>
+        <select class="btn btn-secondary">
+            <option>All Drift Statuses</option>
+            <option>None</option>
+            <option>Moderate</option>
+            <option>High</option>
+        </select>
+        <select class="btn btn-secondary">
+            <option>All Trigger Sources</option>
+            <option>Manual</option>
+            <option>Scheduled</option>
+            <option>Upload</option>
+        </select>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                <th style="padding: 0.75rem;">Run ID</th>
+                <th style="padding: 0.75rem;">Timestamp</th>
+                <th style="padding: 0.75rem;">Source</th>
+                <th style="padding: 0.75rem;">Run Status</th>
+                <th style="padding: 0.75rem;">Drift Status</th>
+                <th style="padding: 0.75rem;">Health Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 0.75rem; font-weight: 600;">#101</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">2026-08-17 12:00:00</td>
+                <td style="padding: 0.75rem;">Manual</td>
+                <td style="padding: 0.75rem;"><span class="badge badge-healthy">COMPLETED</span></td>
+                <td style="padding: 0.75rem;"><span class="badge badge-healthy">NONE</span></td>
+                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-healthy);">92</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 0.75rem; font-weight: 600;">#102</td>
+                <td style="padding: 0.75rem; color: var(--text-secondary);">2026-08-17 12:30:00</td>
+                <td style="padding: 0.75rem;">Simulator</td>
+                <td style="padding: 0.75rem;"><span class="badge badge-healthy">COMPLETED</span></td>
+                <td style="padding: 0.75rem;"><span class="badge badge-warning">MODERATE</span></td>
+                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-warning);">78</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block header_title %}System Alerts{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+        <h3>Alert Center</h3>
+        <a href="{% url 'alerts:recommendations' %}" class="btn btn-secondary">⚡ Retraining Recommendations</a>
+    </div>
+
+    <!-- Filters -->
+    <form method="get" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        <div>
+            <select name="status" class="btn btn-secondary" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if current_status == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <select name="severity" class="btn btn-secondary" onchange="this.form.submit()">
+                <option value="">All Severities</option>
+                {% for code, label in severity_choices %}
+                    <option value="{{ code }}" {% if current_severity == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if current_status or current_severity %}
+            <a href="{% url 'alerts:list' %}" class="btn btn-secondary">Clear Filters</a>
+        {% endif %}
+    </form>
+
+    {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                <th style="padding: 0.75rem;">Model</th>
+                <th style="padding: 0.75rem;">Category</th>
+                <th style="padding: 0.75rem;">Headline</th>
+                <th style="padding: 0.75rem;">Severity</th>
+                <th style="padding: 0.75rem;">Occurrences</th>
+                <th style="padding: 0.75rem;">Last Seen</th>
+                <th style="padding: 0.75rem;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alerts %}
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem; font-weight: 600;">{{ a.ml_model.name }}</td>
+                    <td style="padding: 0.75rem;"><span class="badge badge-secondary">{{ a.category }}</span></td>
+                    <td style="padding: 0.75rem;">
+                        <a href="{% url 'alerts:detail' a.id %}">{{ a.headline }}</a>
+                    </td>
+                    <td style="padding: 0.75rem;">
+                        {% if a.severity == 'CRITICAL' %}
+                            <span class="badge badge-critical">CRITICAL</span>
+                        {% elif a.severity == 'WARNING' %}
+                            <span class="badge badge-warning">WARNING</span>
+                        {% else %}
+                            <span class="badge badge-healthy">INFO</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.75rem;">{{ a.occurrence_count }}</td>
+                    <td style="padding: 0.75rem; color: var(--text-secondary);">{{ a.last_seen_at|date:"Y-m-d H:i" }}</td>
+                    <td style="padding: 0.75rem;">
+                        <a href="{% url 'alerts:detail' a.id %}" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">View</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="7" style="padding: 1.5rem; color: var(--text-secondary); text-align: center;">No alerts found matching your criteria.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block header_title %}Login Activity Log (Admin){% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>Audit Trail — Login Activity</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-top: 1rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                <th style="padding: 0.75rem;">Timestamp</th>
+                <th style="padding: 0.75rem;">Username Attempted</th>
+                <th style="padding: 0.75rem;">Event</th>
+                <th style="padding: 0.75rem;">IP Address</th>
+                <th style="padding: 0.75rem;">User Agent</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for act in activities %}
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem; white-space: nowrap;">{{ act.occurred_at|date:"Y-m-d H:i:s" }}</td>
+                    <td style="padding: 0.75rem; font-weight: 600;">{{ act.username_attempted }}</td>
+                    <td style="padding: 0.75rem;">
+                        {% if act.event == 'LOGIN_SUCCESS' %}
+                            <span class="badge badge-healthy">SUCCESS</span>
+                        {% elif act.event == 'LOGIN_FAILED' %}
+                            <span class="badge badge-critical">FAILED</span>
+                        {% else %}
+                            <span class="badge badge-warning">LOGOUT</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.75rem; color: var(--text-secondary);">{{ act.ip_address|default:"—" }}</td>
+                    <td style="padding: 0.75rem; color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ act.user_agent }}">
+                        {{ act.user_agent|default:"—" }}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5" style="padding: 1rem; color: var(--text-secondary);">No login activity recorded yet.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "registry/model_tab_shell.html" %}
+
+{% block tab_content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>Incoming Data Quality</h3>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="card" style="margin-bottom: 0;">
+            <div style="color: var(--text-secondary); font-size: 0.85rem;">Missing Values Rate</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-healthy); margin-top: 0.25rem;">0.12%</div>
+        </div>
+        <div class="card" style="margin-bottom: 0;">
+            <div style="color: var(--text-secondary); font-size: 0.85rem;">Duplicate Rows Rate</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-healthy); margin-top: 0.25rem;">0.00%</div>
+        </div>
+        <div class="card" style="margin-bottom: 0;">
+            <div style="color: var(--text-secondary); font-size: 0.85rem;">Outlier Rows Rate</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-warning); margin-top: 0.25rem;">1.45%</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 0;">
+        <h4>Quality Checks Summary</h4>
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 1rem;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                    <th style="padding: 0.75rem;">Check Name</th>
+                    <th style="padding: 0.75rem;">Measured Value</th>
+                    <th style="padding: 0.75rem;">Threshold</th>
+                    <th style="padding: 0.75rem;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem;">Missing Value Rate</td>
+                    <td style="padding: 0.75rem;">0.12%</td>
+                    <td style="padding: 0.75rem;">5.00%</td>
+                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem;">Duplicate Row Rate</td>
+                    <td style="padding: 0.75rem;">0.00%</td>
+                    <td style="padding: 0.75rem;">1.00%</td>
+                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem;">Outlier Rate</td>
+                    <td style="padding: 0.75rem;">1.45%</td>
+                    <td style="padding: 0.75rem;">5.00%</td>
+                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

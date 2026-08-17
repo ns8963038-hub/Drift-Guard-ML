@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block header_title %}Model Registry{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Monitored Models</h3>
+        {% if user.is_authenticated %}
+            <a href="#" class="btn btn-primary">+ Register New Model</a>
+        {% endif %}
+    </div>
+    {% if models %}
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            {% for model in models %}
+                <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h4 style="font-size: 1.1rem;">{{ model.name }}</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.875rem;">{{ model.description|default:"No description provided." }}</p>
+                    </div>
+                    <span class="badge badge-healthy">Active</span>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p style="color: var(--text-secondary);">No models registered yet or access restricted.</p>
+    {% endif %}
+</div>
+{% endblock %}

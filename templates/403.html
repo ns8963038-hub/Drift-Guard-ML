@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block header_title %}403 Access Denied{% endblock %}
+
+{% block content %}
+<div class="card" style="text-align: center; padding: 3rem;">
+    <h1 style="font-size: 3rem; color: var(--color-critical);">403</h1>
+    <h3 style="margin-top: 1rem;">Model not found or access denied.</h3>
+    <p style="color: var(--text-secondary); margin-top: 0.5rem;">
+        You do not have permission to access this resource or model.
+    </p>
+    <a href="{% url 'dashboard:index' %}" class="btn btn-primary" style="margin-top: 1.5rem;">Return to Dashboard</a>
+</div>
+{% endblock %}

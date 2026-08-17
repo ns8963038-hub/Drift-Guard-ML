@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DriftGuard ML{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/charts.css' %}">
+    <script src="{% static 'js/theme.js' %}"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="layout-wrapper">
+        <aside class="sidebar">
+            <div style="font-size: 1.25rem; font-weight: 700; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 2rem;">
+                🛡️ DriftGuard
+            </div>
+            <nav style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <a href="{% url 'dashboard:index' %}" class="btn btn-secondary" style="justify-content: flex-start;">📊 Dashboard</a>
+                <a href="{% url 'registry:list' %}" class="btn btn-secondary" style="justify-content: flex-start;">🤖 Models</a>
+                <a href="{% url 'alerts:list' %}" class="btn btn-secondary" style="justify-content: flex-start;">🚨 Alerts</a>
+            </nav>
+            <div style="margin-top: auto;">
+                <button onclick="toggleTheme()" class="btn btn-secondary" style="width: 100%;">🌓 Toggle Theme</button>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="header-bar">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <h2>{% block header_title %}Overview{% endblock %}</h2>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    {% if user.is_authenticated %}
+                        <span>👤 {{ user.username }} ({{ user.get_role_display }})</span>
+                        <a href="{% url 'accounts:logout' %}" class="btn btn-secondary">Logout</a>
+                    {% else %}
+                        <a href="{% url 'accounts:login' %}" class="btn btn-primary">Login</a>
+                    {% endif %}
+                </div>
+            </header>
+            {% block content %}
+            <div class="card">
+                <h3>Welcome to DriftGuard</h3>
+                <p style="color: var(--text-secondary); margin-top: 0.5rem;">
+                    Multi-user ML model monitoring & data drift detection platform.
+                </p>
+            </div>
+            {% endblock %}
+        </main>
+    </div>
+    <script src="{% static 'js/charts.js' %}"></script>
+    <script src="{% static 'js/tables.js' %}"></script>
+    <script src="{% static 'js/polling.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block header_title %}{{ ml_model.name }}{% endblock %}
+
+{% block content %}
+<div class="card" style="padding: 1.25rem 1.5rem 0 1.5rem; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+            <h2 style="font-size: 1.5rem; font-weight: 700;">{{ ml_model.name }}</h2>
+            <p style="color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.875rem;">
+                Target: <code>{{ ml_model.target_column }}</code> · Type: {{ ml_model.get_problem_type_display }}
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{% url 'registry:edit' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Edit Model</a>
+            <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-primary" style="font-size: 0.875rem;">+ Upload Version</a>
+        </div>
+    </div>
+
+    <!-- Model Detail Navigation Tabs (WORK_SPLIT §5.1) -->
+    <div style="display: flex; gap: 1.5rem; margin-top: 1.5rem; border-bottom: 1px solid var(--border-color);">
+        <a href="{% url 'registry:overview' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'overview' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'overview' %}var(--accent-primary){% else %}transparent{% endif %};">Overview</a>
+        <a href="{% url 'registry:versions' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'versions' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'versions' %}var(--accent-primary){% else %}transparent{% endif %};">Versions</a>
+        <a href="{% url 'dashboard:model_drift' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'drift' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'drift' %}var(--accent-primary){% else %}transparent{% endif %};">Drift</a>
+        <a href="{% url 'dashboard:model_performance' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'performance' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'performance' %}var(--accent-primary){% else %}transparent{% endif %};">Performance</a>
+        <a href="{% url 'dashboard:model_quality' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'quality' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'quality' %}var(--accent-primary){% else %}transparent{% endif %};">Data Quality</a>
+        <a href="{% url 'registry:history' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'history' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'history' %}var(--accent-primary){% else %}transparent{% endif %};">History</a>
+        {% if user.role == 'ADMIN' or user.is_superuser %}
+            <a href="{% url 'alerts:thresholds' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'thresholds' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'thresholds' %}var(--accent-primary){% else %}transparent{% endif %};">Thresholds</a>
+            <a href="#" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: var(--text-muted);">Simulator</a>
+        {% endif %}
+    </div>
+</div>
+
+{% block tab_content %}{% endblock %}
+{% endblock %}

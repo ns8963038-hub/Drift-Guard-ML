@@ -1,0 +1,64 @@
+{% extends "registry/model_tab_shell.html" %}
+
+{% block tab_content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Model Versions</h3>
+        <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-primary">+ Upload New Version</a>
+    </div>
+
+    {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                <th style="padding: 0.75rem;">Version Label</th>
+                <th style="padding: 0.75rem;">Status</th>
+                <th style="padding: 0.75rem;">Validation</th>
+                <th style="padding: 0.75rem;">Uploaded</th>
+                <th style="padding: 0.75rem;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in versions %}
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                    <td style="padding: 0.75rem; font-weight: 600;">{{ v.label }}</td>
+                    <td style="padding: 0.75rem;">
+                        {% if v.status == 'ACTIVE' %}
+                            <span class="badge badge-healthy">ACTIVE</span>
+                        {% elif v.status == 'ARCHIVED' %}
+                            <span class="badge badge-critical">ARCHIVED</span>
+                        {% else %}
+                            <span class="badge badge-warning">INACTIVE</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.75rem;">
+                        <span class="badge badge-healthy">{{ v.get_validation_status_display }}</span>
+                    </td>
+                    <td style="padding: 0.75rem; color: var(--text-secondary);">{{ v.created_at|date:"Y-m-d H:i" }}</td>
+                    <td style="padding: 0.75rem;">
+                        {% if v.status != 'ACTIVE' %}
+                            <form method="post" action="{% url 'registry:version_activate' ml_model.slug v.id %}" style="display: inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Activate</button>
+                            </form>
+                        {% else %}
+                            <span style="color: var(--text-muted); font-size: 0.8rem;">Active Version</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5" style="padding: 1rem; color: var(--text-secondary);">No model versions uploaded yet.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

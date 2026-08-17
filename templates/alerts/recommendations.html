@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block header_title %}Retraining Recommendations{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>Advisory Retraining Recommendations</h3>
+    </div>
+
+    {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+        {% for rec in recommendations %}
+            <div class="card" style="border-left: 4px solid {% if rec.severity == 'URGENT' %}var(--color-critical){% else %}var(--color-warning){% endif %}; margin-bottom: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <span class="badge {% if rec.severity == 'URGENT' %}badge-critical{% else %}badge-warning{% endif %}">{{ rec.severity }}</span>
+                        <h4 style="font-size: 1.2rem; margin-top: 0.5rem;">Model: {{ rec.ml_model.name }} (Version: {{ rec.version.label }})</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem;">Created {{ rec.created_at|date:"Y-m-d H:i" }} · Status: <strong>{{ rec.get_status_display }}</strong></p>
+                    </div>
+                    {% if rec.status == 'OPEN' %}
+                        <form method="post" style="display: flex; gap: 0.5rem;">
+                            {% csrf_token %}
+                            <input type="hidden" name="recommendation_id" value="{{ rec.id }}">
+                            <button type="submit" name="action" value="acknowledge" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Acknowledge</button>
+                            <button type="submit" name="action" value="dismiss" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; color: var(--text-muted);">Dismiss</button>
+                        </form>
+                    {% endif %}
+                </div>
+
+                <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+                    <h5 style="font-size: 0.9rem; color: var(--text-secondary);">Measured Triggers:</h5>
+                    <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-size: 0.875rem; color: var(--text-primary);">
+                        {% for tr in rec.triggers %}
+                            <li>{{ tr }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        {% empty %}
+            <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No retraining recommendations generated yet.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

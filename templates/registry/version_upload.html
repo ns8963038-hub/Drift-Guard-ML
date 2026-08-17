@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block header_title %}Upload Model Version: {{ ml_model.name }}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 550px; margin: 0 auto;">
+    <h3>Upload Model Version Artifact</h3>
+    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">
+        Upload a trained scikit-learn model artifact (<code>.joblib</code> or <code>.pkl</code>). The artifact will be validated against the 5-check quality gate before saving.
+    </p>
+
+    {% if messages %}
+        <div style="margin-top: 1rem;">
+            {% for message in messages %}
+                <div class="badge badge-critical" style="display: block; padding: 0.75rem; margin-bottom: 0.5rem; white-space: pre-wrap; text-align: left;">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+        {% csrf_token %}
+        <div>
+            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Version Label (Optional)</label>
+            <input type="text" name="label" class="btn btn-secondary" style="width: 100%; text-align: left;" placeholder="e.g. V1, V2.1">
+        </div>
+        <div>
+            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Model Artifact File (.joblib or .pkl)</label>
+            <input type="file" name="artifact" class="btn btn-secondary" style="width: 100%; text-align: left;" accept=".pkl,.joblib" required>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            <button type="submit" class="btn btn-primary" style="flex: 1;">Validate & Upload</button>
+            <a href="{% url 'registry:versions' ml_model.slug %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
