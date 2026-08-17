@@ -69,12 +69,23 @@ person's folders.**
 | `templates/` — base, and B's own screen templates | `templates/monitoring/`, `templates/datasets/`, `templates/simulator/` |
 | `static/` — all CSS and JS | |
 
-### 3.1 The two shared directories
+### 3.1 Shared paths — per-file ownership
+
+Neither person owns these outright. Ownership is **per file**, so you still never
+edit the same file as the other person.
 
 | Path | Rule |
 |---|---|
-| `scripts/` | **Per-file ownership.** Nandan: `prepare_datasets.py`, `train_demo_models.py`. Suhas: `seed_demo.py`. Never the same file. |
+| `scripts/` | Nandan: `prepare_datasets.py`, `train_demo_models.py`. Suhas: `seed_demo.py`. |
 | `templates/` | Suhas owns `base.html` and the model-detail tab shell. Nandan adds his own subdirectories that `{% extends %}` them. |
+| `tests/` | Named after what it tests. Nandan: `test_profiling.py`, `test_drift.py`, `test_quality.py`, `test_performance.py`, `test_health.py`, `test_explain.py`, `test_pipeline.py`, `test_simulator.py`. Suhas: `test_permissions.py`, `test_auth.py`, `test_registry.py`, `test_alerts.py`, `test_charts.py`, `test_comparison.py`. `conftest.py` is shared — coordinate. |
+| `requirements.txt` | Split into blocks by comment. Edit only your own block. **Already created** with the full stack for both tracks, so Phase 0 does not need to author it. |
+| `pytest.ini` | **Already created.** Track B extends it in Phase 0 with `DJANGO_SETTINGS_MODULE`. |
+
+> `monitoring/` already contains `engine/` and its `__init__.py`. Phase 0 must **not**
+> run `django-admin startapp monitoring` — it fails on a non-empty directory. Create
+> `apps.py`, `admin.py` and `migrations/__init__.py` by hand, or generate the app
+> elsewhere and move those files in.
 
 ### 3.2 Shared files needing coordination
 

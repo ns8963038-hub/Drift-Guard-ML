@@ -1,0 +1,31 @@
+# DriftGuard — Python 3.11
+#
+# Shared file: Track A owns the data/ML block, Track B owns the web block.
+# Edit only your own block, in a small dedicated commit (WORK_SPLIT.md §3.2).
+
+# ── Web framework (Track B) ───────────────────────────────
+Django==5.0.9
+djangorestframework==3.15.2
+django-environ==0.11.2
+whitenoise==6.7.0
+
+# ── Data & ML (Track A) ───────────────────────────────────
+pandas==2.2.3
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.5.2
+joblib==1.4.2
+pyarrow==17.0.0          # parquet, for stored reference samples
+
+# ── Scheduling (Track A) ──────────────────────────────────
+APScheduler==3.10.4
+
+# ── Testing ───────────────────────────────────────────────
+pytest==8.3.3
+pytest-django==4.9.0
+pytest-cov==5.0.0
+factory-boy==3.3.1
+
+# ── Tooling ───────────────────────────────────────────────
+ruff==0.6.9
+black==24.10.0
