@@ -30,7 +30,7 @@
         <a href="{% url 'registry:history' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'history' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'history' %}var(--accent-primary){% else %}transparent{% endif %};">History</a>
         {% if user.role == 'ADMIN' or user.is_superuser %}
             <a href="{% url 'alerts:thresholds' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'thresholds' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'thresholds' %}var(--accent-primary){% else %}transparent{% endif %};">Thresholds</a>
-            <a href="#" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: var(--text-muted);">Simulator</a>
+            <a href="{% url 'simulator:list' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'simulator' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'simulator' %}var(--accent-primary){% else %}transparent{% endif %};">Simulator</a>
         {% endif %}
     </div>
 </div>

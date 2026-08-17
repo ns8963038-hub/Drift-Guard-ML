@@ -1,0 +1,138 @@
+{% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
+
+{% block tab_content %}
+{% for item in scenarios %}
+<div class="card" data-scenario="{{ item.scenario.pk }}">
+  <div class="run-meta" style="justify-content: space-between;">
+    <h3>{{ item.scenario.name }}</h3>
+    {% status_badge item.scenario.status %}
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-tile">
+      <span class="stat-label">Next batch</span>
+      <span class="stat-value" data-field="next_batch_index">{{ item.scenario.next_batch_index }}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Interval</span>
+      <span class="stat-value">{{ item.scenario.interval_seconds }}<span class="stat-unit">sec</span></span>
+      <span class="muted tiny">production setting: hourly</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Batch size</span>
+      <span class="stat-value">{{ item.scenario.batch_size }}<span class="stat-unit">rows</span></span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Labels</span>
+      <span class="stat-value">{% if item.scenario.include_labels %}Included{% else %}Withheld{% endif %}</span>
+    </div>
+  </div>
+
+  <p class="muted" style="margin-top:1rem;">
+    <strong>Current phase:</strong> <span data-field="phase">{{ item.phase }}</span>
+  </p>
+  <p class="muted tiny" data-field="ticker">
+    {% if item.scenario.last_tick_at %}Last batch {{ item.scenario.last_tick_at|timesince }} ago.{% endif %}
+    {% if item.next_run %}Next at {{ item.next_run|time:"H:i:s" }}.{% endif %}
+  </p>
+
+  {% if item.scenario.last_error %}
+    <div class="alert-banner critical">{{ item.scenario.last_error }}</div>
+  {% endif %}
+
+  <form method="post" action="{% url 'simulator:action' ml_model.slug item.scenario.pk %}"
+        style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:1rem;">
+    {% csrf_token %}
+    {% if item.scenario.status == 'RUNNING' %}
+      <button name="action" value="pause" class="btn btn-secondary">Pause</button>
+      <button name="action" value="stop" class="btn btn-secondary">Stop</button>
+    {% elif item.scenario.status == 'PAUSED' %}
+      <button name="action" value="resume" class="btn btn-primary">Resume</button>
+      <button name="action" value="stop" class="btn btn-secondary">Stop</button>
+    {% else %}
+      <button name="action" value="start" class="btn btn-primary">Start</button>
+    {% endif %}
+    <button name="action" value="run_now" class="btn btn-secondary">Run one batch now</button>
+    <button name="action" value="delete" class="btn btn-secondary"
+            onclick="return confirm('Delete this scenario? Monitoring history is kept.')">Delete</button>
+  </form>
+</div>
+{% empty %}
+<div class="card">
+  <p class="empty-state">
+    <strong>No scenarios yet.</strong><br>
+    A scenario replays held-out rows on a timer and gradually injects drift, so
+    the dashboard changes without anyone touching it.
+  </p>
+</div>
+{% endfor %}
+
+{% if has_baseline %}
+<div class="card">
+  <h3>New scenario</h3>
+  <p class="muted">
+    The default plan is calibrated against the real detector: batches 0–9 replay
+    clean data, moderate drift begins at batch 10, and high drift at batch 25.
+  </p>
+  <form method="post" action="{% url 'simulator:create' ml_model.slug %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="grid-2">
+      <label>Name<input type="text" name="name" value="{{ ml_model.name }} drift scenario"></label>
+      <label>Holdout CSV<input type="file" name="holdout" accept=".csv" required>
+        <span class="muted tiny">Rows held out of training, replayed as the feed.</span>
+      </label>
+      <label>Numeric column to drift
+        <select name="numeric_column">
+          {% for c in numeric_columns %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Categorical column to drift
+        <select name="categorical_column">
+          {% for c in categorical_columns %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Interval (seconds)
+        <input type="number" name="interval_seconds" value="30" min="10" max="86400">
+        <span class="muted tiny">10s–24h. Nobody watches an hourly demo.</span>
+      </label>
+      <label>Batch size<input type="number" name="batch_size" value="500" min="10" max="10000"></label>
+      <label class="checkbox">
+        <input type="checkbox" name="include_labels" checked> Include true labels
+        <span class="muted tiny">Uncheck to simulate production data with no ground truth.</span>
+      </label>
+    </div>
+    <button type="submit" class="btn btn-primary">Create scenario</button>
+  </form>
+</div>
+{% else %}
+<div class="card">
+  <p class="empty-state">
+    <strong>No baseline dataset.</strong><br>
+    A scenario needs a reference to drift away from. Upload the baseline first.
+  </p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-scenario]').forEach(function (card) {
+  var id = card.dataset.scenario;
+  setInterval(function () {
+    fetch("{% url 'simulator:list' ml_model.slug %}" + id + "/status/")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        card.querySelector('[data-field="next_batch_index"]').textContent = d.next_batch_index;
+        card.querySelector('[data-field="phase"]').textContent = d.phase;
+        var ticker = card.querySelector('[data-field="ticker"]');
+        if (d.latest_run) {
+          ticker.textContent = "Latest run #" + d.latest_run.id + " · " +
+            d.latest_run.drift + " drift · health " + d.latest_run.health;
+        }
+      })
+      .catch(function () { /* a poll failing must not break the page */ });
+  }, 5000);
+});
+</script>
+{% endblock %}

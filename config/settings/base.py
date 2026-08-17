@@ -107,3 +107,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Email Configuration
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_ENABLED = os.getenv("EMAIL_ENABLED", "False").lower() in ("true", "1", "yes")
+
+
+# ── Scheduler ─────────────────────────────────────────────────────────
+# In-process APScheduler. Disabled during tests, where a background thread
+# ticking against a test database causes nothing but flakiness.
+SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "True") == "True"
+SIMULATOR_DEFAULT_INTERVAL_SECONDS = int(
+    os.getenv("SIMULATOR_DEFAULT_INTERVAL_SECONDS", "30")
+)
+BATCH_FILE_RETENTION_DAYS = int(os.getenv("BATCH_FILE_RETENTION_DAYS", "30"))

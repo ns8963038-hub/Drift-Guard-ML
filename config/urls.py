@@ -8,5 +8,6 @@ urlpatterns = [
     path("models/", include("registry.urls")),
     path("alerts/", include("alerts.urls")),
     path("models/", include("datasets.urls")),
+    path("models/", include("simulator.urls")),
     path("", include("monitoring.urls")),
 ]
