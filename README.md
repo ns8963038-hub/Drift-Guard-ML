@@ -52,11 +52,35 @@ python scripts/prepare_datasets.py
 # 3. Demo models — trains 4 scikit-learn Pipelines and validates each one
 python scripts/train_demo_models.py
 
-# 4. Verify
+# 4. Demo data — users, models, baselines, a drift scenario and run history
+python scripts/seed_demo.py
+
+# 5. Verify
 pytest
+
+# 6. Run it
+python manage.py runserver --noreload
 ```
 
-Expected: **216 tests passing**.
+Expected: **307 tests passing**.
+
+`--noreload` is not optional. Django's autoreloader runs `AppConfig.ready()` in
+two processes, which would start two schedulers and deliver every simulated
+batch twice.
+
+### Demo accounts
+
+| Username | Password | Role | Can see |
+|---|---|---|---|
+| `admin` | `driftguard123` | Admin | Everything |
+| `dsci` | `driftguard123` | Data Scientist | Both models (owner) |
+| `mleng` | `driftguard123` | ML Engineer | Churn only — Income returns 404 |
+
+The asymmetry is deliberate: it makes role-based access control something you
+can *show* rather than assert.
+
+The walkthrough is in [APP_FLOW.md](docs/APP_FLOW.md) §8, and it runs as a test
+(`tests/test_demo.py`) so a broken demo fails CI rather than a viva.
 
 Step 2 needs an internet connection **once**; raw files are cached under
 `data/raw/` and every later run reuses them.
@@ -71,14 +95,16 @@ inputs from the same fixed seeds.
 
 | Layer | State |
 |---|---|
-| Statistical engine (`monitoring/engine/`) | **Complete** — 216 tests, 95% coverage |
-| Drift simulator (`simulator/transforms.py`) | **Complete** |
-| Demo data & model scripts (`scripts/`) | **Complete** |
-| Django web layer — auth, registry, alerts, dashboard | In progress |
-| Monitoring persistence, screens, scheduler | Blocked on the web layer's model classes |
+| Statistical engine (`monitoring/engine/`) | **Complete** — 96% coverage |
+| Drift simulator and scheduler | **Complete** |
+| Auth, roles and per-model access | **Complete** |
+| Model registry, versions, validation gate | **Complete** |
+| Monitoring persistence and pipeline | **Complete** |
+| Alerts, deduplication, retraining recommendations | **Complete** |
+| Dashboard, charts, comparison, history | **Complete** |
+| Demo data and seed scripts | **Complete** |
 
-The engine is finished and independently runnable **before** any of the web
-application exists. That is deliberate — see below.
+All 14 features from the client brief are implemented. 307 tests.
 
 ---
 
@@ -133,7 +159,7 @@ monitoring/engine/    The statistical core (Django-free)
   pipeline.py         The orchestrator every ingestion path calls
 simulator/            Drift injection for the unattended demo
 scripts/              Dataset preparation and demo model training
-tests/                216 tests
+tests/                307 tests
 ```
 
 ---
