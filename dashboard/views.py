@@ -1,275 +1,391 @@
+"""Dashboard, model tabs and the chart JSON endpoints — PRD FR-07.
+
+Every endpoint reads real monitoring runs. Two rules run through all of them:
+
+* **Unlabelled runs render as gaps, never as zero** (FR-04.7). A batch with no
+  ground truth has unknown accuracy; plotting it as 0 turns the performance
+  chart into a cliff and makes a healthy model look broken.
+* **Series are capped and down-sampled server-side** at 500 points, so a model
+  with thousands of runs still renders (TRD §10).
+"""
+
 from datetime import timedelta
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
+from accounts.models import LoginActivity, User
 from alerts.models import Alert, RetrainRecommendation
-from accounts.models import User, LoginActivity
-from core.constants import Role, AlertStatus, RetrainStatus
+from core.constants import (
+    AlertSeverity,
+    AlertStatus,
+    DriftStatus,
+    RetrainStatus,
+    Role,
+    RunStatus,
+)
 from core.mixins import visible_models
+from monitoring.models import FeatureDriftResult, MonitoringRun
+
+MAX_POINTS = 500
+
+RANGES = {"24h": 1, "7d": 7, "30d": 30, "all": None}
 
 
-def downsample(data_list, max_points=500):
-    if len(data_list) <= max_points:
-        return data_list
-    step = len(data_list) / max_points
-    return [data_list[int(i * step)] for i in range(max_points)]
+def downsample(values, max_points=MAX_POINTS):
+    """Evenly thin a series, always keeping the newest point.
+
+    The most recent value is what a reader looks at first, so it must survive
+    thinning even when the stride would otherwise skip it.
+    """
+    if len(values) <= max_points:
+        return values
+    step = len(values) / max_points
+    thinned = [values[int(i * step)] for i in range(max_points - 1)]
+    thinned.append(values[-1])
+    return thinned
+
+
+def _runs_for(request, ml_model):
+    """Completed runs for a model within the requested range, oldest first."""
+    window = RANGES.get(request.GET.get("range", "30d"), 30)
+    queryset = ml_model.runs.filter(status=RunStatus.COMPLETED)
+    if window is not None:
+        queryset = queryset.filter(
+            created_at__gte=timezone.now() - timedelta(days=window)
+        )
+    return list(queryset.order_by("created_at"))
+
+
+def _model_or_404(request, slug):
+    return get_object_or_404(visible_models(request.user), slug=slug)
+
+
+def _labels(runs):
+    return [run.created_at.strftime("%d %b %H:%M") for run in runs]
+
+
+# ══════════════════════════════════════════════════════════════════
+# S2 — the role-aware dashboard
+# ══════════════════════════════════════════════════════════════════
 
 
 @login_required
 def dashboard_index(request):
     user = request.user
-    models = visible_models(user)
+    models = list(visible_models(user).select_related("owner"))
 
-    total_models = models.count()
-    unresolved_alerts = Alert.objects.filter(
+    unresolved = Alert.objects.filter(
         ml_model__in=models, status__in=[AlertStatus.NEW, AlertStatus.ACKNOWLEDGED]
-    )
-    active_alerts_count = unresolved_alerts.count()
-    open_recommendations_count = RetrainRecommendation.objects.filter(
-        ml_model__in=models, status=RetrainStatus.OPEN
-    ).count()
+    ).select_related("ml_model")
+
+    # Latest run per model, for the health cards.
+    cards = []
+    for ml_model in models:
+        latest = (
+            ml_model.runs.filter(status=RunStatus.COMPLETED)
+            .order_by("-created_at")
+            .first()
+        )
+        active_version = ml_model.versions.filter(status="ACTIVE").first()
+        cards.append(
+            {
+                "model": ml_model,
+                "run": latest,
+                "version": active_version,
+                "needs_attention": bool(
+                    latest and latest.health_band in ("WARNING", "CRITICAL")
+                ),
+            }
+        )
+
+    # Worst health first, so anything wrong is at the top of the page.
+    cards.sort(key=lambda c: (c["run"].health_score if c["run"] else 101))
 
     context = {
         "user_role": user.role,
-        "total_models": total_models,
-        "active_alerts_count": active_alerts_count,
-        "open_recommendations_count": open_recommendations_count,
-        "models": models[:5],
-        "alerts": unresolved_alerts[:5],
+        "cards": cards,
+        "total_models": len(models),
+        "active_alerts_count": unresolved.count(),
+        "open_recommendations_count": RetrainRecommendation.objects.filter(
+            ml_model__in=models, status=RetrainStatus.OPEN
+        ).count(),
+        "recommendations": RetrainRecommendation.objects.filter(
+            ml_model__in=models, status=RetrainStatus.OPEN
+        ).select_related("ml_model")[:5],
+        "alerts": unresolved[:8],
+        "recent_runs": MonitoringRun.objects.filter(ml_model__in=models)
+        .select_related("ml_model")
+        .order_by("-created_at")[:8],
+        "attention": [c for c in cards if c["needs_attention"]],
     }
 
     if user.role == Role.ADMIN or user.is_superuser:
         context["total_users"] = User.objects.count()
-        context["recent_activities"] = LoginActivity.objects.select_related(
-            "user"
-        ).all()[:5]
+        context["active_users_today"] = (
+            LoginActivity.objects.filter(
+                event="LOGIN_SUCCESS",
+                occurred_at__gte=timezone.now() - timedelta(days=1),
+            )
+            .values("user")
+            .distinct()
+            .count()
+        )
+        context["recent_activities"] = LoginActivity.objects.select_related("user")[:8]
 
     return render(request, "dashboard/index.html", context)
 
 
+# ══════════════════════════════════════════════════════════════════
+# Chart endpoints — FR-07
+# ══════════════════════════════════════════════════════════════════
+
+
 @login_required
 def chart_performance_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    days = int(request.GET.get("days", 30))
+    """FR-07.1 — accuracy, precision, recall and F1 over time.
 
-    timestamps = []
-    accuracy = []
-    precision = []
-    recall = []
-    f1 = []
+    Unlabelled runs contribute ``None``, which Chart.js renders as a gap because
+    the line factory sets ``spanGaps: false``. Interpolating across them would
+    invent measurements that were never taken.
+    """
+    ml_model = _model_or_404(request, slug)
+    runs = _runs_for(request, ml_model)
 
-    now = timezone.now()
-    for i in range(min(days * 4, 100)):
-        ts = now - timedelta(hours=i * 6)
-        timestamps.append(ts.strftime("%Y-%m-%d %H:%M"))
-        accuracy.append(round(0.82 + (i % 5) * 0.01 - (i % 3) * 0.005, 4))
-        precision.append(round(0.78 + (i % 4) * 0.01, 4))
-        recall.append(round(0.75 + (i % 6) * 0.008, 4))
-        f1.append(round(0.76 + (i % 5) * 0.009, 4))
+    series = {"accuracy": [], "precision": [], "recall": [], "f1": []}
+    labels = []
 
-    timestamps.reverse()
-    accuracy.reverse()
-    precision.reverse()
-    recall.reverse()
-    f1.reverse()
+    for run in runs:
+        snapshot = getattr(run, "performance", None)
+        labels.append(run.created_at.strftime("%d %b %H:%M"))
+        if snapshot is None or not snapshot.labels_available:
+            for key in series:
+                series[key].append(None)
+            continue
+        series["accuracy"].append(snapshot.accuracy)
+        series["precision"].append(
+            snapshot.precision_positive or snapshot.precision_macro
+        )
+        series["recall"].append(snapshot.recall_positive or snapshot.recall_macro)
+        series["f1"].append(snapshot.f1_positive or snapshot.f1_macro)
 
-    data = {
-        "model": ml_model.name,
-        "timestamps": downsample(timestamps),
-        "series": {
-            "accuracy": downsample(accuracy),
-            "precision": downsample(precision),
-            "recall": downsample(recall),
-            "f1": downsample(f1),
-        },
-    }
-    return JsonResponse(data)
+    labelled = sum(1 for v in series["accuracy"] if v is not None)
+    return JsonResponse(
+        {
+            "model": ml_model.name,
+            "labels": downsample(labels),
+            "series": {k: downsample(v) for k, v in series.items()},
+            "labelled_runs": labelled,
+            "unlabelled_runs": len(runs) - labelled,
+        }
+    )
 
 
 @login_required
 def chart_drift_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    days = int(request.GET.get("days", 30))
+    """FR-07.2 — feature counts by drift status, plus the worst PSI seen.
 
-    timestamps = []
-    ks_values = []
-    chi2_values = []
-    psi_values = []
+    Two separate charts rather than one with two y-axes. Counts and PSI are
+    different scales, and a dual-axis chart is the single most misread form
+    there is (UIUX §5.4).
+    """
+    ml_model = _model_or_404(request, slug)
+    runs = _runs_for(request, ml_model)
 
-    now = timezone.now()
-    for i in range(min(days * 4, 100)):
-        ts = now - timedelta(hours=i * 6)
-        timestamps.append(ts.strftime("%Y-%m-%d %H:%M"))
-        ks_values.append(round(0.02 + (i % 7) * 0.008, 4))
-        chi2_values.append(round(0.01 + (i % 5) * 0.01, 4))
-        psi_values.append(round(0.05 + (i % 9) * 0.015, 4))
+    max_psi = []
+    for run in runs:
+        worst = (
+            FeatureDriftResult.objects.filter(run=run, psi__isnull=False)
+            .order_by("-psi")
+            .values_list("psi", flat=True)
+            .first()
+        )
+        max_psi.append(round(worst, 4) if worst is not None else None)
 
-    timestamps.reverse()
-    ks_values.reverse()
-    chi2_values.reverse()
-    psi_values.reverse()
-
-    data = {
-        "model": ml_model.name,
-        "timestamps": downsample(timestamps),
-        "series": {
-            "ks": downsample(ks_values),
-            "chi2": downsample(chi2_values),
-            "psi": downsample(psi_values),
-        },
-    }
-    return JsonResponse(data)
-
-
-@login_required
-def chart_distribution_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-
-    data = {
-        "model": ml_model.name,
-        "categories": ["No", "Yes"],
-        "baseline": [0.73, 0.27],
-        "production": [0.65, 0.35],
-    }
-    return JsonResponse(data)
-
-
-@login_required
-def chart_prediction_trend_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-
-    timestamps = []
-    positive_rate = []
-    negative_rate = []
-
-    now = timezone.now()
-    for i in range(30):
-        ts = now - timedelta(days=i)
-        timestamps.append(ts.strftime("%Y-%m-%d"))
-        pos = round(0.25 + (i % 4) * 0.02, 2)
-        positive_rate.append(pos)
-        negative_rate.append(round(1.0 - pos, 2))
-
-    timestamps.reverse()
-    positive_rate.reverse()
-    negative_rate.reverse()
-
-    data = {
-        "model": ml_model.name,
-        "timestamps": timestamps,
-        "positive": positive_rate,
-        "negative": negative_rate,
-    }
-    return JsonResponse(data)
-
-
-@login_required
-def chart_alerts_trend_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-
-    timestamps = []
-    critical_counts = []
-    warning_counts = []
-
-    now = timezone.now()
-    for i in range(14):
-        ts = now - timedelta(days=i)
-        timestamps.append(ts.strftime("%Y-%m-%d"))
-        critical_counts.append(i % 3)
-        warning_counts.append(i % 4)
-
-    timestamps.reverse()
-    critical_counts.reverse()
-    warning_counts.reverse()
-
-    data = {
-        "model": ml_model.name,
-        "timestamps": timestamps,
-        "critical": critical_counts,
-        "warning": warning_counts,
-    }
-    return JsonResponse(data)
+    return JsonResponse(
+        {
+            "model": ml_model.name,
+            "labels": downsample(_labels(runs)),
+            "counts": {
+                "high": downsample([r.features_high for r in runs]),
+                "moderate": downsample([r.features_moderate for r in runs]),
+                "none": downsample([r.features_clean for r in runs]),
+            },
+            "max_psi": downsample(max_psi),
+        }
+    )
 
 
 @login_required
 def chart_health_trend_api(request, slug):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
+    """FR-07.6 — the health score over time, with its band boundaries."""
+    ml_model = _model_or_404(request, slug)
+    runs = _runs_for(request, ml_model)
+    thresholds = runs[-1].thresholds_snapshot if runs else {}
 
-    timestamps = []
-    health_scores = []
+    return JsonResponse(
+        {
+            "model": ml_model.name,
+            "labels": downsample(_labels(runs)),
+            "scores": downsample([r.health_score for r in runs]),
+            "bands": downsample([r.health_band for r in runs]),
+            "warning_at": thresholds.get("health_warning_threshold", 80),
+            "critical_at": thresholds.get("health_critical_threshold", 60),
+        }
+    )
 
-    now = timezone.now()
-    for i in range(30):
-        ts = now - timedelta(days=i)
-        timestamps.append(ts.strftime("%Y-%m-%d"))
-        health_scores.append(max(40, 95 - (i % 10) * 3))
 
-    timestamps.reverse()
-    health_scores.reverse()
+@login_required
+def chart_prediction_trend_api(request, slug):
+    """FR-07.4 — the predicted class mix over time.
 
-    data = {
-        "model": ml_model.name,
-        "timestamps": timestamps,
-        "scores": health_scores,
-    }
-    return JsonResponse(data)
+    Available for every run, labelled or not: it is the only behavioural signal
+    a model gives you without ground truth.
+    """
+    ml_model = _model_or_404(request, slug)
+    runs = _runs_for(request, ml_model)
+
+    classes = set()
+    per_run = []
+    for run in runs:
+        snapshot = getattr(run, "performance", None)
+        proportions = (
+            (snapshot.prediction_distribution or {}).get("proportions", {})
+            if snapshot
+            else {}
+        )
+        per_run.append(proportions)
+        classes.update(proportions)
+
+    ordered = sorted(classes)
+    return JsonResponse(
+        {
+            "model": ml_model.name,
+            "labels": downsample(_labels(runs)),
+            "series": {
+                name: downsample([round(100 * p.get(name, 0.0), 2) for p in per_run])
+                for name in ordered
+            },
+        }
+    )
+
+
+@login_required
+def chart_alerts_trend_api(request, slug):
+    """FR-07.5 — alerts raised per day, split by severity."""
+    ml_model = _model_or_404(request, slug)
+    window = RANGES.get(request.GET.get("range", "30d"), 30) or 90
+    since = timezone.now() - timedelta(days=window)
+
+    alerts = Alert.objects.filter(ml_model=ml_model, first_seen_at__gte=since)
+
+    # Bucket on the ISO date so the keys sort chronologically. Sorting the
+    # display strings instead would order "01 Feb" before "02 Jan".
+    buckets: dict[str, dict[str, int]] = {}
+    for alert in alerts:
+        day = alert.first_seen_at.date().isoformat()
+        buckets.setdefault(day, {"INFO": 0, "WARNING": 0, "CRITICAL": 0})
+        buckets[day][alert.severity] = buckets[day].get(alert.severity, 0) + 1
+
+    days = sorted(buckets)
+    return JsonResponse(
+        {
+            "model": ml_model.name,
+            "labels": [
+                timezone.datetime.fromisoformat(d).strftime("%d %b") for d in days
+            ],
+            "series": {
+                "info": [buckets[d].get(AlertSeverity.INFO, 0) for d in days],
+                "warning": [buckets[d].get(AlertSeverity.WARNING, 0) for d in days],
+                "critical": [buckets[d].get(AlertSeverity.CRITICAL, 0) for d in days],
+            },
+        }
+    )
+
+
+@login_required
+def chart_distribution_api(request, slug):
+    """FR-07.3 — baseline vs latest batch for one feature.
+
+    Delegates to the monitoring app so there is exactly one implementation of
+    the histogram comparison rather than two that can disagree.
+    """
+    from monitoring.views import feature_distribution_api
+
+    ml_model = _model_or_404(request, slug)
+    feature = request.GET.get("feature")
+    latest = (
+        ml_model.runs.filter(status=RunStatus.COMPLETED).order_by("-created_at").first()
+    )
+
+    if latest is None or not feature:
+        return JsonResponse(
+            {"type": "empty", "labels": [], "baseline": [], "current": []}
+        )
+    return feature_distribution_api(request, latest.pk, feature)
 
 
 @login_required
 def chart_feature_distribution_api(request, slug, feature_name):
-    # STUB: returns generated placeholder points, not real data.
-    # Repoint at MonitoringRun once Track A's models land (contract C3).
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
+    from monitoring.views import feature_distribution_api
 
-    data = {
-        "model": ml_model.name,
-        "feature": feature_name,
-        "bins": ["0-10", "10-20", "20-30", "30-40", "40-50"],
-        "baseline_counts": [120, 240, 310, 180, 90],
-        "production_counts": [90, 180, 350, 240, 140],
-    }
-    return JsonResponse(data)
+    ml_model = _model_or_404(request, slug)
+    latest = (
+        ml_model.runs.filter(status=RunStatus.COMPLETED).order_by("-created_at").first()
+    )
+    if latest is None:
+        return JsonResponse(
+            {"type": "empty", "labels": [], "baseline": [], "current": []}
+        )
+    return feature_distribution_api(request, latest.pk, feature_name)
+
+
+# ══════════════════════════════════════════════════════════════════
+# S9 / S10 / S11 — model detail tabs
+# ══════════════════════════════════════════════════════════════════
+
+
+def _tab_context(request, slug, tab):
+    ml_model = _model_or_404(request, slug)
+    latest = (
+        ml_model.runs.filter(status=RunStatus.COMPLETED)
+        .select_related("quality", "performance")
+        .order_by("-created_at")
+        .first()
+    )
+    return ml_model, latest, {"ml_model": ml_model, "run": latest, "tab": tab}
 
 
 @login_required
 def model_drift_tab_view(request, slug):
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    return render(
-        request,
-        "dashboard/model_drift_tab.html",
-        {"ml_model": ml_model, "tab": "drift"},
+    ml_model, latest, context = _tab_context(request, slug, "drift")
+    context["results"] = (
+        sorted(
+            latest.feature_results.all(),
+            key=lambda r: (
+                {DriftStatus.HIGH: 0, DriftStatus.MODERATE: 1, DriftStatus.NONE: 2}.get(
+                    r.status, 3
+                ),
+                -(r.psi or 0),
+            ),
+        )
+        if latest
+        else []
     )
+    return render(request, "dashboard/model_drift_tab.html", context)
 
 
 @login_required
 def model_performance_tab_view(request, slug):
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    return render(
-        request,
-        "dashboard/model_performance_tab.html",
-        {"ml_model": ml_model, "tab": "performance"},
-    )
+    ml_model, latest, context = _tab_context(request, slug, "performance")
+    context["performance"] = getattr(latest, "performance", None) if latest else None
+    return render(request, "dashboard/model_performance_tab.html", context)
 
 
 @login_required
 def model_quality_tab_view(request, slug):
-    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    return render(
-        request,
-        "dashboard/model_quality_tab.html",
-        {"ml_model": ml_model, "tab": "quality"},
-    )
+    ml_model, latest, context = _tab_context(request, slug, "quality")
+    context["quality"] = getattr(latest, "quality", None) if latest else None
+    return render(request, "dashboard/model_quality_tab.html", context)

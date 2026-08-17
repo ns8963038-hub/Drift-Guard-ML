@@ -1,62 +1,92 @@
 {% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
 
 {% block tab_content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>Monitoring Execution History</h3>
-        <a href="{% url 'registry:history_export' ml_model.slug %}" class="btn btn-secondary">📥 Export CSV</a>
-    </div>
+  <div class="run-meta" style="justify-content: space-between;">
+    <h3>Monitoring history <span class="muted tiny">{{ total }} run{{ total|pluralize }}</span></h3>
+    <a href="{% url 'registry:history_export' ml_model.slug %}" class="btn btn-secondary">Export CSV</a>
+  </div>
 
-    <!-- Filters -->
-    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-        <select class="btn btn-secondary">
-            <option>All Run Statuses</option>
-            <option>Completed</option>
-            <option>Failed</option>
-        </select>
-        <select class="btn btn-secondary">
-            <option>All Drift Statuses</option>
-            <option>None</option>
-            <option>Moderate</option>
-            <option>High</option>
-        </select>
-        <select class="btn btn-secondary">
-            <option>All Trigger Sources</option>
-            <option>Manual</option>
-            <option>Scheduled</option>
-            <option>Upload</option>
-        </select>
-    </div>
+  <form method="get" class="grid-2" style="margin-top:1rem;">
+    <label>Run status
+      <select name="status">
+        <option value="">Any</option>
+        {% for value in "COMPLETED,FAILED,RUNNING,QUEUED"|split:"," %}
+          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ value|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Drift status
+      <select name="drift">
+        <option value="">Any</option>
+        {% for value in "NONE,MODERATE,HIGH"|split:"," %}
+          <option value="{{ value }}" {% if filters.drift == value %}selected{% endif %}>{{ value|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Triggered by
+      <select name="trigger">
+        <option value="">Any</option>
+        {% for value in "MANUAL,SCHEDULED,UPLOAD,API"|split:"," %}
+          <option value="{{ value }}" {% if filters.trigger == value %}selected{% endif %}>{{ value|title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>&nbsp;
+      <button type="submit" class="btn btn-secondary">Apply filters</button>
+    </label>
+  </form>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-        <thead>
-            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
-                <th style="padding: 0.75rem;">Run ID</th>
-                <th style="padding: 0.75rem;">Timestamp</th>
-                <th style="padding: 0.75rem;">Source</th>
-                <th style="padding: 0.75rem;">Run Status</th>
-                <th style="padding: 0.75rem;">Drift Status</th>
-                <th style="padding: 0.75rem;">Health Score</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">#101</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">2026-08-17 12:00:00</td>
-                <td style="padding: 0.75rem;">Manual</td>
-                <td style="padding: 0.75rem;"><span class="badge badge-healthy">COMPLETED</span></td>
-                <td style="padding: 0.75rem;"><span class="badge badge-healthy">NONE</span></td>
-                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-healthy);">92</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">#102</td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">2026-08-17 12:30:00</td>
-                <td style="padding: 0.75rem;">Simulator</td>
-                <td style="padding: 0.75rem;"><span class="badge badge-healthy">COMPLETED</span></td>
-                <td style="padding: 0.75rem;"><span class="badge badge-warning">MODERATE</span></td>
-                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-warning);">78</td>
-            </tr>
-        </tbody>
+  {% if page.object_list %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Run</th><th>When</th><th>Trigger</th><th>Version</th>
+          <th class="num">Rows</th><th>Status</th><th>Drift</th>
+          <th class="num">Health</th><th class="num">Quality</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in page.object_list %}
+        <tr class="clickable" onclick="location.href='{% url 'monitoring:run_detail' run.pk %}'">
+          <td><strong>#{{ run.pk }}</strong></td>
+          <td>{{ run.created_at|date:"j M Y, H:i" }}</td>
+          <td>{{ run.get_trigger_source_display }}</td>
+          <td>{{ run.model_version.label|default:"—" }}</td>
+          <td class="num">{{ run.data_batch.row_count|default:"—" }}</td>
+          <td>{% if run.status == 'COMPLETED' %}{% status_badge 'HEALTHY' %}{% else %}{% status_badge 'CRITICAL' %}{% endif %}</td>
+          <td>{% status_badge run.overall_drift_status %}</td>
+          <td class="num">{{ run.health_score|default:"—" }}</td>
+          <td class="num">{{ run.quality.quality_score|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
+
+  {% if page.has_other_pages %}
+  <div class="run-meta" style="margin-top:1rem; justify-content:space-between;">
+    <span class="muted tiny">
+      Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+    </span>
+    <span>
+      {% if page.has_previous %}<a class="btn btn-secondary" href="?page={{ page.previous_page_number }}">Previous</a>{% endif %}
+      {% if page.has_next %}<a class="btn btn-secondary" href="?page={{ page.next_page_number }}">Next</a>{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  <p class="muted tiny" style="margin-top:1rem;">
+    Every run stores the thresholds it was judged under, so results here never
+    change when a threshold is edited.
+  </p>
+  {% else %}
+    <p class="empty-state">
+      <strong>No runs recorded yet.</strong><br>
+      Upload a production batch or start the simulator to begin monitoring.
+    </p>
+  {% endif %}
 </div>
 {% endblock %}

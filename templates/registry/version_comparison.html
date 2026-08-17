@@ -1,84 +1,72 @@
-{% extends "base.html" %}
+{% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
 
-{% block header_title %}Version Comparison: {{ ml_model.name }}{% endblock %}
-
-{% block content %}
+{% block tab_content %}
 <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>Compare Model Versions</h3>
-        <a href="{% url 'registry:versions' ml_model.slug %}" class="btn btn-secondary">&larr; Back to Versions</a>
-    </div>
+  <h3>Compare versions</h3>
 
-    <!-- Version Selection Header -->
-    <form method="get" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-        <div>
-            <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Baseline Version (V1)</label>
-            <select name="v1" class="btn btn-secondary" onchange="this.form.submit()">
-                {% for v in versions %}
-                    <option value="{{ v.id }}" {% if v1 and v1.id == v.id %}selected{% endif %}>{{ v.label }} (v{{ v.version_number }})</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div style="font-size: 1.5rem; align-self: flex-end; padding-bottom: 0.25rem;">⚡</div>
-        <div>
-            <label style="display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Candidate Version (V2)</label>
-            <select name="v2" class="btn btn-secondary" onchange="this.form.submit()">
-                {% for v in versions %}
-                    <option value="{{ v.id }}" {% if v2 and v2.id == v.id %}selected{% endif %}>{{ v.label }} (v{{ v.version_number }})</option>
-                {% endfor %}
-            </select>
-        </div>
+  {% if versions|length < 2 %}
+    <p class="empty-state">
+      <strong>This model has only one version.</strong><br>
+      Upload a second version to compare them.
+    </p>
+  {% else %}
+    <form method="get" class="grid-2">
+      <label>Version A
+        <select name="v1">
+          {% for v in versions %}<option value="{{ v.pk }}" {% if v1.pk == v.pk %}selected{% endif %}>{{ v.label }} — {{ v.algorithm_name|default:"—" }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Version B
+        <select name="v2">
+          {% for v in versions %}<option value="{{ v.pk }}" {% if v2.pk == v.pk %}selected{% endif %}>{{ v.label }} — {{ v.algorithm_name|default:"—" }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>&nbsp;<button type="submit" class="btn btn-secondary">Compare</button></label>
     </form>
 
     {% if not schema_compatible %}
-        <div class="badge badge-warning" style="display: block; padding: 0.75rem; margin-bottom: 1.5rem;">
-            ⚠️ <strong>Incompatible feature schemas detected.</strong> Feature drift comparison rows suppressed, but performance metrics are shown.
-        </div>
+      <div class="alert-banner warning">
+        These versions were trained on different feature sets, so drift figures
+        are not comparable and have been left out. The performance measures below
+        are still valid.
+      </div>
     {% endif %}
 
     {% if verdict %}
-        <div class="card" style="background: var(--bg-primary); border-left: 4px solid var(--accent-primary); margin-bottom: 1.5rem;">
-            <h4>Comparison Verdict</h4>
-            <p style="margin-top: 0.5rem; font-weight: 600; color: var(--accent-primary);">{{ verdict }}</p>
-        </div>
+      <div class="alert-banner" style="border-color: var(--brand); background: var(--brand-subtle);">
+        <strong>{{ verdict }}</strong>
+      </div>
     {% endif %}
 
-    <!-- Comparison Matrix Table -->
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+    <div class="table-scroll">
+      <table class="data-table">
         <thead>
-            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
-                <th style="padding: 0.75rem;">Metric / Property</th>
-                <th style="padding: 0.75rem;">{{ v1.label|default:"V1" }}</th>
-                <th style="padding: 0.75rem;">{{ v2.label|default:"V2" }}</th>
-                <th style="padding: 0.75rem;">Delta</th>
-            </tr>
+          <tr><th>Measure</th><th class="num">{{ v1.label }}</th><th class="num">{{ v2.label }}</th><th class="num">Difference</th></tr>
         </thead>
         <tbody>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">Status</td>
-                <td style="padding: 0.75rem;"><span class="badge badge-secondary">{{ v1.get_status_display }}</span></td>
-                <td style="padding: 0.75rem;"><span class="badge badge-healthy">{{ v2.get_status_display }}</span></td>
-                <td style="padding: 0.75rem; color: var(--text-secondary);">—</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">Accuracy</td>
-                <td style="padding: 0.75rem;">78.78%</td>
-                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-healthy);">85.14% ★</td>
-                <td style="padding: 0.75rem; color: var(--color-healthy);">+6.36%</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">Precision</td>
-                <td style="padding: 0.75rem;">61.76%</td>
-                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-healthy);">77.75% ★</td>
-                <td style="padding: 0.75rem; color: var(--color-healthy);">+15.99%</td>
-            </tr>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 0.75rem; font-weight: 600;">F1 Score</td>
-                <td style="padding: 0.75rem;">56.85%</td>
-                <td style="padding: 0.75rem; font-weight: 700; color: var(--color-healthy);">65.18% ★</td>
-                <td style="padding: 0.75rem; color: var(--color-healthy);">+8.33%</td>
-            </tr>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="num">
+              {% if row.a is not None %}{{ row.a|floatformat:row.places }}{% if row.winner == 'a' %} <span class="badge badge-good">✓ better</span>{% endif %}
+              {% else %}<span class="muted">insufficient data</span>{% endif %}
+            </td>
+            <td class="num">
+              {% if row.b is not None %}{{ row.b|floatformat:row.places }}{% if row.winner == 'b' %} <span class="badge badge-good">✓ better</span>{% endif %}
+              {% else %}<span class="muted">insufficient data</span>{% endif %}
+            </td>
+            <td class="num">{% if row.delta is not None %}{{ row.delta|floatformat:row.places }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+
+    <p class="muted tiny">
+      Rows where a version has no measured runs show "insufficient data" rather
+      than zero — nothing was recorded, which is not the same as scoring nothing.
+    </p>
+  {% endif %}
 </div>
 {% endblock %}

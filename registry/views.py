@@ -163,33 +163,37 @@ def model_version_activate_view(request, slug, version_id):
 
 @login_required
 def version_comparison_view(request, slug):
+    """S16 — compare two versions of the same model (FR-12).
+
+    Compares the seven measures FR-12.2 lists, not just training accuracy.
+    Training accuracy alone would rank V1 top on this dataset while V2 catches
+    26 points more churners — which is the whole reason the platform tracks
+    several metrics.
+    """
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
-    versions = ml_model.versions.all()
+    versions = list(ml_model.versions.all())
 
-    v1_id = request.GET.get("v1")
-    v2_id = request.GET.get("v2")
+    def pick(param, fallback):
+        chosen = request.GET.get(param)
+        if chosen:
+            return next((v for v in versions if str(v.pk) == chosen), fallback)
+        return fallback
 
-    v1 = ml_model.versions.filter(pk=v1_id).first() if v1_id else versions.first()
-    v2 = (
-        ml_model.versions.filter(pk=v2_id).first()
-        if v2_id
-        else (versions[1] if len(versions) > 1 else None)
-    )
+    v1 = pick("v1", versions[0] if versions else None)
+    v2 = pick("v2", versions[1] if len(versions) > 1 else None)
 
-    schema_compatible = True
-    verdict = None
+    rows, verdict, schema_compatible = [], None, True
 
     if v1 and v2:
-        if v1.feature_schema != v2.feature_schema and (
-            v1.feature_schema and v2.feature_schema
-        ):
-            schema_compatible = False
-
-        acc1 = v1.training_accuracy or 0.82
-        acc2 = v2.training_accuracy or 0.8514
-        delta = round(abs(acc2 - acc1) * 100, 2)
-        winner = v2.label if acc2 >= acc1 else v1.label
-        verdict = f"{winner} outperforms with a {delta}% accuracy delta."
+        # FR-12.5 — comparing drift across different feature sets is meaningless,
+        # so those rows are suppressed rather than shown as a misleading delta.
+        schema_compatible = not (
+            v1.feature_schema
+            and v2.feature_schema
+            and set(v1.feature_schema) != set(v2.feature_schema)
+        )
+        rows = _comparison_rows(v1, v2, schema_compatible)
+        verdict = _verdict(v1, v2, rows)
 
     return render(
         request,
@@ -199,19 +203,148 @@ def version_comparison_view(request, slug):
             "versions": versions,
             "v1": v1,
             "v2": v2,
-            "schema_compatible": schema_compatible,
+            "rows": rows,
             "verdict": verdict,
+            "schema_compatible": schema_compatible,
+            "tab": "versions",
         },
+    )
+
+
+def _version_stats(version):
+    """Observed metrics for one version, or None where nothing was measured."""
+    from django.db.models import Avg
+
+    runs = version.runs.filter(status="COMPLETED")
+    labelled = runs.filter(performance__labels_available=True)
+
+    aggregates = labelled.aggregate(
+        accuracy=Avg("performance__accuracy"),
+        f1=Avg("performance__f1_positive"),
+        recall=Avg("performance__recall_positive"),
+    )
+    health = runs.aggregate(score=Avg("health_score"), drifted=Avg("features_high"))
+    latest = runs.order_by("-created_at").first()
+
+    return {
+        "training_accuracy": version.training_accuracy,
+        "latest_accuracy": getattr(
+            getattr(latest, "performance", None), "accuracy", None
+        ),
+        "mean_accuracy": aggregates["accuracy"],
+        "mean_f1": aggregates["f1"],
+        "mean_recall": aggregates["recall"],
+        "mean_health": health["score"],
+        "mean_high_drift": health["drifted"],
+        "run_count": runs.count(),
+        "alert_count": version.ml_model.alerts.filter(
+            run__model_version=version
+        ).count(),
+    }
+
+
+COMPARISON_ROWS = [
+    ("training_accuracy", "Training accuracy", 4, True),
+    ("latest_accuracy", "Latest accuracy", 4, True),
+    ("mean_accuracy", "Mean accuracy", 4, True),
+    ("mean_f1", "Mean F1 (positive class)", 4, True),
+    ("mean_recall", "Mean recall (positive class)", 4, True),
+    ("mean_health", "Mean health score", 1, True),
+    ("mean_high_drift", "Mean high-drift features", 2, False),
+    ("run_count", "Monitoring runs", 0, None),
+    ("alert_count", "Alerts raised", 0, False),
+]
+
+
+def _comparison_rows(v1, v2, schema_compatible):
+    """One row per measure, marking the better side and the delta (FR-12.3)."""
+    left, right = _version_stats(v1), _version_stats(v2)
+    rows = []
+
+    for key, label, places, higher_is_better in COMPARISON_ROWS:
+        if key == "mean_high_drift" and not schema_compatible:
+            continue
+
+        a, b = left[key], right[key]
+        row = {
+            "label": label,
+            "a": a,
+            "b": b,
+            "places": places,
+            "winner": None,
+            "delta": None,
+        }
+
+        if a is not None and b is not None and higher_is_better is not None and a != b:
+            row["winner"] = "a" if (a > b) == higher_is_better else "b"
+            row["delta"] = abs(a - b)
+
+        rows.append(row)
+    return rows
+
+
+def _verdict(v1, v2, rows):
+    """FR-12.4 — a sentence, not a table the reader has to interpret."""
+    wins_a = sum(1 for r in rows if r["winner"] == "a")
+    wins_b = sum(1 for r in rows if r["winner"] == "b")
+    runs = next((r for r in rows if r["label"] == "Monitoring runs"), None)
+    total_runs = (runs["a"] or 0) + (runs["b"] or 0) if runs else 0
+
+    if wins_a == wins_b:
+        return (
+            f"{v1.label} and {v2.label} are evenly matched across "
+            f"{len(rows)} measures over {total_runs} runs."
+        )
+
+    better, worse = (v1, v2) if wins_a > wins_b else (v2, v1)
+    accuracy = next((r for r in rows if r["label"] == "Mean accuracy"), None)
+    detail = ""
+    if accuracy and accuracy["delta"] is not None:
+        side = "a" if better is v1 else "b"
+        direction = "ahead on" if accuracy["winner"] == side else "behind on"
+        detail = f", {direction} mean accuracy by {accuracy['delta'] * 100:.1f} points"
+
+    return (
+        f"{better.label} outperforms {worse.label} on "
+        f"{max(wins_a, wins_b)} of {len(rows)} measures{detail}, across "
+        f"{total_runs} runs."
     )
 
 
 @login_required
 def monitoring_history_view(request, slug):
+    """S12 — every run for this model, filterable and paginated (FR-13.2)."""
+    from django.core.paginator import Paginator
+
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
+    runs = ml_model.runs.select_related("model_version", "data_batch").order_by(
+        "-created_at"
+    )
+
+    filters = {
+        "status": request.GET.get("status", ""),
+        "drift": request.GET.get("drift", ""),
+        "trigger": request.GET.get("trigger", ""),
+    }
+    if filters["status"]:
+        runs = runs.filter(status=filters["status"])
+    if filters["drift"]:
+        runs = runs.filter(overall_drift_status=filters["drift"])
+    if filters["trigger"]:
+        runs = runs.filter(trigger_source=filters["trigger"])
+
+    page = Paginator(runs, 25).get_page(request.GET.get("page"))
+
     return render(
         request,
         "registry/monitoring_history.html",
-        {"ml_model": ml_model, "tab": "history"},
+        {
+            "ml_model": ml_model,
+            "page": page,
+            "filters": filters,
+            "total": runs.count(),
+            "tab": "history",
+        },
     )
 
 

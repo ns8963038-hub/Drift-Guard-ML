@@ -11,14 +11,14 @@ import pytest
 from django.urls import reverse
 
 from core.constants import Permission, Role
-from tests.test_ingest import churn_model, drifted, holdout  # noqa: F401
+from tests.conftest import drifted, holdout
 from monitoring.services import ingest_batch
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def run_with_drift(churn_model):  # noqa: F811
+def run_with_drift(churn_model):
     ml_model, version, owner = churn_model
     return ingest_batch(ml_model, drifted()), ml_model, owner
 
@@ -108,7 +108,7 @@ def test_runs_of_an_ungranted_model_are_unreachable(client, run_with_drift):
     )
 
 
-def test_batch_upload_screen_lists_required_columns(client, churn_model):  # noqa: F811
+def test_batch_upload_screen_lists_required_columns(client, churn_model):
     ml_model, _, owner = churn_model
     client.force_login(owner)
 
@@ -120,9 +120,7 @@ def test_batch_upload_screen_lists_required_columns(client, churn_model):  # noq
     assert "rejected rather than partly processed" in body
 
 
-def test_ml_engineer_can_upload_a_batch_but_not_a_baseline(
-    client, churn_model
-):  # noqa: F811
+def test_ml_engineer_can_upload_a_batch_but_not_a_baseline(client, churn_model):
     """PRD §5.2 — feeding production data in is the ML Engineer's job; defining
     the reference the model is judged against is not."""
     from accounts.models import User, ModelAccess
@@ -150,9 +148,7 @@ def test_ml_engineer_can_upload_a_batch_but_not_a_baseline(
         pass
 
 
-def test_uploading_a_batch_end_to_end_through_the_form(
-    client, churn_model
-):  # noqa: F811
+def test_uploading_a_batch_end_to_end_through_the_form(client, churn_model):
     """The real S15 path: a CSV posted to the view produces a run."""
     from django.core.files.uploadedfile import SimpleUploadedFile
 

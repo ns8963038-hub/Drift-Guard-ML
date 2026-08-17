@@ -66,3 +66,9 @@ def pct(value, places=1):
     if value is None:
         return "—"
     return f"{value:.{places}f}%"
+
+
+@register.filter
+def split(value, separator=","):
+    """Split a string in a template — used for inline filter option lists."""
+    return str(value).split(separator)

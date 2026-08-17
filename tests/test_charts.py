@@ -1,58 +1,145 @@
+"""Chart endpoint tests — PRD FR-07.
+
+These previously asserted against generated data. They now exercise real runs,
+and the properties they check are the ones that make the charts honest rather
+than merely present.
+"""
+
+from __future__ import annotations
+
 import pytest
 from django.urls import reverse
-from accounts.models import User
-from registry.models import MLModel
-from core.constants import Role, ProblemType
+
+from tests.conftest import drifted, holdout
+from monitoring.services import ingest_batch
+
+pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.django_db
-def test_chart_endpoints_and_downsampling(client):
-    user = User.objects.create_user(
-        username="chartuser", password="p", role=Role.ML_ENGINEER
+@pytest.fixture
+def model_with_runs(churn_model):
+    """A clean run, an unlabelled run, then a drifted run — in that order."""
+    ml_model, _, owner = churn_model
+    ingest_batch(ml_model, holdout(300, seed=1))
+    ingest_batch(ml_model, holdout(300, seed=2).drop(columns=["Churn"]))
+    ingest_batch(ml_model, drifted(300, seed=3))
+    return ml_model, owner
+
+
+def get(client, name, ml_model, **params):
+    return client.get(reverse(f"dashboard:{name}", args=[ml_model.slug]), params).json()
+
+
+def test_performance_chart_gaps_unlabelled_runs(client, model_with_runs):
+    """FR-04.7 — the single most important property of this chart.
+
+    The middle run had no ground truth. It must appear as a gap, not as zero:
+    plotting 0 would draw a cliff and make a healthy model look collapsed.
+    """
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    data = get(client, "chart_performance", ml_model, range="all")
+
+    accuracy = data["series"]["accuracy"]
+    assert len(accuracy) == 3
+    assert accuracy[1] is None, "unlabelled run must be a gap"
+    assert 0 not in accuracy, "a gap must never be rendered as zero"
+    assert data["labelled_runs"] == 2
+    assert data["unlabelled_runs"] == 1
+
+
+def test_drift_chart_counts_add_up(client, model_with_runs):
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    data = get(client, "chart_drift", ml_model, range="all")
+
+    counts = data["counts"]
+    assert len(counts["high"]) == 3
+    for i in range(3):
+        assert counts["high"][i] + counts["moderate"][i] + counts["none"][i] == 19
+    assert counts["high"][2] >= 2, "the drifted run is last"
+    assert max(p for p in data["max_psi"] if p is not None) > 0.25
+
+
+def test_health_chart_carries_its_band_boundaries(client, model_with_runs):
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    data = get(client, "chart_health_trend", ml_model, range="all")
+
+    assert len(data["scores"]) == 3
+    assert data["warning_at"] == 80
+    assert data["critical_at"] == 60
+    assert data["scores"][0] > data["scores"][2], "health fell as drift arrived"
+
+
+def test_prediction_trend_covers_unlabelled_runs_too(client, model_with_runs):
+    """The only behavioural signal available without ground truth."""
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    data = get(client, "chart_prediction_trend", ml_model, range="all")
+
+    assert set(data["series"]) == {"No", "Yes"}
+    for values in data["series"].values():
+        assert len(values) == 3
+        assert all(v is not None for v in values)
+
+
+def test_alerts_trend_is_chronological(client, model_with_runs):
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    data = get(client, "chart_alerts_trend", ml_model, range="all")
+
+    assert "critical" in data["series"]
+    assert len(data["labels"]) == len(data["series"]["critical"])
+
+
+def test_charts_respect_model_access(client, model_with_runs):
+    from accounts.models import User
+    from core.constants import Role
+
+    ml_model, _ = model_with_runs
+    outsider = User.objects.create_user(
+        username="out", password="p", role=Role.ML_ENGINEER
     )
-    client.login(username="chartuser", password="p")
+    client.force_login(outsider)
 
-    model = MLModel.objects.create(
-        name="Chart Model",
-        slug="chart-model",
-        target_column="target",
-        problem_type=ProblemType.BINARY,
-        owner=user,
-    )
+    response = client.get(reverse("dashboard:chart_health_trend", args=[ml_model.slug]))
+    assert response.status_code == 404
 
-    # 1. Performance chart API
-    url_perf = reverse("dashboard:chart_performance", kwargs={"slug": model.slug})
-    resp = client.get(url_perf)
-    assert resp.status_code == 200
-    json_data = resp.json()
-    assert "series" in json_data
-    assert len(json_data["timestamps"]) <= 500
 
-    # 2. Drift chart API
-    url_drift = reverse("dashboard:chart_drift", kwargs={"slug": model.slug})
-    resp_drift = client.get(url_drift)
-    assert resp_drift.status_code == 200
-    assert "ks" in resp_drift.json()["series"]
+def test_no_endpoint_returns_generated_data(client, churn_model):
+    """A model with no runs must return empty series, not invented ones.
 
-    # 3. Distribution API
-    url_dist = reverse("dashboard:chart_distribution", kwargs={"slug": model.slug})
-    assert client.get(url_dist).status_code == 200
+    The endpoints previously produced a synthetic sawtooth regardless of the
+    data. An empty model is the case that exposes it.
+    """
+    ml_model, _, owner = churn_model
+    client.force_login(owner)
 
-    # 4. Prediction trend API
-    url_pred = reverse("dashboard:chart_prediction_trend", kwargs={"slug": model.slug})
-    assert client.get(url_pred).status_code == 200
+    for name in ("chart_performance", "chart_drift", "chart_health_trend"):
+        data = get(client, name, ml_model, range="all")
+        flat = []
+        for value in data.values():
+            if isinstance(value, list):
+                flat += value
+            elif isinstance(value, dict):
+                for inner in value.values():
+                    if isinstance(inner, list):
+                        flat += inner
+        assert not flat, f"{name} invented data for a model with no runs"
 
-    # 5. Alerts trend API
-    url_alerts = reverse("dashboard:chart_alerts_trend", kwargs={"slug": model.slug})
-    assert client.get(url_alerts).status_code == 200
 
-    # 6. Health trend API
-    url_health = reverse("dashboard:chart_health_trend", kwargs={"slug": model.slug})
-    assert client.get(url_health).status_code == 200
+def test_model_tabs_render(client, model_with_runs):
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    for name in ("model_drift", "model_performance", "model_quality"):
+        response = client.get(reverse(f"dashboard:{name}", args=[ml_model.slug]))
+        assert response.status_code == 200, name
 
-    # 7. Feature distribution API
-    url_feat = reverse(
-        "dashboard:chart_feature_distribution",
-        kwargs={"slug": model.slug, "feature_name": "tenure"},
-    )
-    assert client.get(url_feat).status_code == 200
+
+def test_dashboard_sorts_worst_health_first(client, model_with_runs):
+    ml_model, owner = model_with_runs
+    client.force_login(owner)
+    response = client.get(reverse("dashboard:index"))
+    assert response.status_code == 200
+    assert ml_model.name in response.content.decode()

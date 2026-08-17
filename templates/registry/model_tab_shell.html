@@ -13,7 +13,9 @@
         </div>
         <div style="display: flex; gap: 0.5rem;">
             <a href="{% url 'registry:edit' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Edit Model</a>
-            <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-primary" style="font-size: 0.875rem;">+ Upload Version</a>
+            <a href="{% url 'datasets:baseline_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Upload Baseline</a>
+            <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">+ Version</a>
+            <a href="{% url 'datasets:batch_upload' ml_model.slug %}" class="btn btn-primary" style="font-size: 0.875rem;">Upload Batch</a>
         </div>
     </div>
 
@@ -24,6 +26,7 @@
         <a href="{% url 'dashboard:model_drift' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'drift' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'drift' %}var(--accent-primary){% else %}transparent{% endif %};">Drift</a>
         <a href="{% url 'dashboard:model_performance' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'performance' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'performance' %}var(--accent-primary){% else %}transparent{% endif %};">Performance</a>
         <a href="{% url 'dashboard:model_quality' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'quality' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'quality' %}var(--accent-primary){% else %}transparent{% endif %};">Data Quality</a>
+        <a href="{% url 'registry:compare' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'compare' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'compare' %}var(--accent-primary){% else %}transparent{% endif %};">Compare</a>
         <a href="{% url 'registry:history' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'history' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'history' %}var(--accent-primary){% else %}transparent{% endif %};">History</a>
         {% if user.role == 'ADMIN' or user.is_superuser %}
             <a href="{% url 'alerts:thresholds' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'thresholds' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'thresholds' %}var(--accent-primary){% else %}transparent{% endif %};">Thresholds</a>
