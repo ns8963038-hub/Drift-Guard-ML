@@ -549,6 +549,57 @@ This is the complete list. If it is not here, it is not a dependency.
 **6**. Track B is upstream. Phase 0 and the early `MLModel` push (H1) are the two moments where
 Suhas holds up the whole project — everything else can proceed in parallel.
 
+### 7.1a The unblock sequence — do these three first
+
+**Track A is fully blocked until these land**, and they are far smaller than a whole phase:
+roughly a day and a half of work that unlocks about 14 points of Nandan's.
+
+Push each as its own commit, in this order. The order is not negotiable.
+
+| # | Deliverable | Why it must come first |
+|---|---|---|
+| 1 | **Phase 0** complete (§6) | Nothing exists without it. Read the ⛔ box in task 1 before running `startapp` |
+| 2 | **`accounts.User`** + `AUTH_USER_MODEL = "accounts.User"` in settings, migrated | `MLModel.owner` points at it, and `AUTH_USER_MODEL` must be set before **any** migration runs — changing it afterwards means deleting the database and every migration file |
+| 3 | **`registry.MLModel` + `ModelVersion`** — model classes and migration only | Nandan's `MonitoringRun`, `DataBatch` and `BaselineDataset` all have foreign keys to these. Django resolves string references lazily, but `makemigrations` still fails if the class does not exist |
+
+**Step 3 means the model classes and nothing else.** No views, no forms, no upload screen, no
+validation gate, no admin registration. Those are Phase 2 proper and can wait — get the tables
+into the database and go back to Phase 1.
+
+#### The fields Track A actually reads
+
+Full definitions are in [TRD.md](TRD.md) §4.2 and every field there should exist eventually.
+These are the subset Nandan's services read, so getting them right in the first migration avoids
+a second one:
+
+**`MLModel`**
+
+| Field | Type | Read for |
+|---|---|---|
+| `name` | CharField | display |
+| `slug` | SlugField | URLs |
+| `target_column` | CharField | deciding whether a batch carries labels |
+| `positive_class` | CharField, nullable | binary precision/recall/F1 |
+| `problem_type` | choice `BINARY`/`MULTICLASS` | metric selection |
+| `is_active` | Boolean | pipeline pre-flight — a deactivated model accepts no batches |
+| `owner` | FK → `accounts.User` | access grants |
+
+**`ModelVersion`**
+
+| Field | Type | Read for |
+|---|---|---|
+| `ml_model` | FK → `MLModel` | the run's parent |
+| `label` | CharField (`V1`, `V2`, …) | display |
+| `artifact` | FileField | loading the model to score a batch |
+| `status` | choice `INACTIVE`/`ACTIVE`/`ARCHIVED` | finding the version to score with |
+| `validation_status` | choice `PENDING`/`PASSED`/`FAILED` | pipeline pre-flight |
+| `feature_schema` | JSONField | which columns to monitor and pass to the model |
+| `training_accuracy` | FloatField, nullable | the health score's performance reference (§8.1) |
+| `baseline_prediction_distribution` | JSONField, nullable | the health score's stability component (§8.2) |
+
+The last two are nullable on purpose — a first run has no reference yet, and the engine treats
+that as "not yet established" rather than as a failure.
+
 ### 7.2 How to never be blocked — stub everything on day one
 
 Both sides stub what they consume. A function returning a hardcoded value is enough to build an
