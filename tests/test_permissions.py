@@ -274,11 +274,28 @@ def test_matrix_dashboard(client, people):
 
 
 def test_matrix_anonymous_is_locked_out(client, people):
+    """Logged-out users are redirected, and the redirect must actually work.
+
+    This previously asserted only `status_code in (302, 403)`, which a redirect
+    to a non-existent URL satisfies. LOGIN_URL was unset, so Django sent people
+    to its default /accounts/login/ — a 404 — and the test passed anyway.
+    Following the redirect is what makes the assertion mean something.
+    """
     for url in [
         reverse("dashboard:index"),
         reverse("registry:list"),
         reverse("alerts:list"),
         reverse("accounts:user_list"),
     ]:
-        response = client.get(url)
-        assert response.status_code in (302, 403), url
+        response = client.get(url, follow=True)
+        assert response.status_code == 200, f"{url} redirected somewhere broken"
+        assert b"Sign In" in response.content, f"{url} did not land on the login page"
+        assert response.redirect_chain, f"{url} was served without authentication"
+
+
+def test_login_url_setting_matches_the_real_login_route(client):
+    """Guards the specific mismatch above: the setting and the route must agree."""
+    from django.conf import settings
+
+    assert settings.LOGIN_URL == reverse("accounts:login")
+    assert client.get(settings.LOGIN_URL).status_code == 200

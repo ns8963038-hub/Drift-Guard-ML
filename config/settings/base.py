@@ -81,6 +81,14 @@ DATABASES = {
 
 AUTH_USER_MODEL = "accounts.User"
 
+# Django's @login_required sends unauthenticated users to LOGIN_URL, which
+# defaults to "/accounts/login/". This project serves login at "/login/", so
+# without these three settings every logged-out visit lands on a 404 instead of
+# the sign-in form — including a session that simply expired.
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/login/"
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
