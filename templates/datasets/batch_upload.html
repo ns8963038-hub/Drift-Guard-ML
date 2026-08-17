@@ -1,0 +1,37 @@
+{% extends "registry/model_tab_shell.html" %}
+{% block tab_content %}
+<div class="card">
+  <h2>Upload production batch</h2>
+  <p class="muted">
+    A batch of rows to check against the baseline. Include the target column if you
+    have the true labels — without them drift and data quality are still analysed
+    in full, and accuracy is recorded as unavailable rather than zero.
+  </p>
+
+  {% if not baseline %}
+    <p class="empty-state">
+      <strong>No baseline dataset yet.</strong><br>
+      Upload the training data first — there is nothing to compare a batch against.
+    </p>
+  {% else %}
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label>CSV file
+        <input type="file" name="batch" accept=".csv" required>
+      </label>
+      <button type="submit" class="btn btn-primary">Upload and run checks</button>
+    </form>
+
+    <details class="table-view">
+      <summary>Required columns ({{ required_columns|length }})</summary>
+      <p class="muted tiny">
+        A batch missing any of these is rejected rather than partly processed.
+        Extra columns are ignored.
+      </p>
+      <ul class="plain columns">
+        {% for column in required_columns %}<li><code>{{ column }}</code></li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</div>
+{% endblock %}

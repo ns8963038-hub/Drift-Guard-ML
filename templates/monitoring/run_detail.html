@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% load static %}
+{% load monitoring_extras %}
+
+{% block title %}Run #{{ run.pk }} · DriftGuard{% endblock %}
+{% block header_title %}Run #{{ run.pk }}{% endblock %}
+
+{% block content %}
+<p class="breadcrumb">
+  <a href="{% url 'registry:list' %}">Models</a> /
+  <a href="{% url 'registry:overview' ml_model.slug %}">{{ ml_model.name }}</a> /
+  Run #{{ run.pk }}
+</p>
+
+{# ── Run header ─────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="run-meta">
+    <span><strong>{{ run.created_at|date:"j M Y, H:i" }}</strong></span>
+    <span>{{ run.get_trigger_source_display }}</span>
+    <span>{{ run.model_version.label|default:"—" }}</span>
+    <span>{{ run.duration_ms }} ms</span>
+    <span>{{ run.data_batch.row_count|default:0 }} rows</span>
+    {% if not run.labels_available %}<span class="muted">no labels in this batch</span>{% endif %}
+  </div>
+
+  {% if run.status == 'FAILED' %}
+    <div class="alert-banner critical">
+      <strong>This run failed.</strong> {{ run.error_message }}
+    </div>
+  {% endif %}
+
+  <div class="stat-row">
+    <div class="stat-tile">
+      <span class="stat-label">Model health</span>
+      <span class="stat-value">{{ run.health_score|default:"—" }}<span class="stat-unit">/100</span></span>
+      {% status_badge run.health_band %}
+      {% if run.health_capped %}
+        <span class="muted tiny">capped from {{ run.health_raw_score }} — high drift cannot read healthy</span>
+      {% endif %}
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Data drift</span>
+      <span class="stat-value">{{ run.features_high }}<span class="stat-unit">high</span></span>
+      {% status_badge run.overall_drift_status %}
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Data quality</span>
+      <span class="stat-value">{{ quality.quality_score|default:"—" }}<span class="stat-unit">/100</span></span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Accuracy</span>
+      <span class="stat-value">
+        {% if performance.accuracy is not None %}{{ performance.accuracy|floatformat:4 }}
+        {% else %}<span class="muted">n/a</span>{% endif %}
+      </span>
+      {% if not run.labels_available %}<span class="muted tiny">no ground truth</span>{% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Health breakdown — FR-09.4, never a black box ──────────────── #}
+<div class="card">
+  <h3>How this health score was reached</h3>
+  <p class="muted tiny">
+    Weighting: {{ weighting|cut:"_"|title }}.
+    {% if weighting == 'without_labels' %}
+      This batch carried no ground truth, so the performance weight is redistributed
+      across drift, quality and prediction stability rather than scored as zero.
+    {% endif %}
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Component</th><th>Score</th><th>Weight</th><th></th></tr></thead>
+    <tbody>
+      {% for row in health_breakdown %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td class="num">{% if row.score is not None %}{{ row.score|floatformat:1 }}{% else %}<span class="muted">n/a</span>{% endif %}</td>
+        <td class="num">×{{ row.weight|floatformat:0 }}</td>
+        <td style="width:40%">
+          {% if row.score is not None %}<div class="meter"><span style="width:{{ row.score }}%"></span></div>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Feature drift table — FR-08 ────────────────────────────────── #}
+<div class="card">
+  <h3>
+    Feature drift
+    <span class="muted tiny">
+      {{ run.features_total }} features · {{ run.features_high }} high ·
+      {{ run.features_moderate }} moderate
+    </span>
+  </h3>
+
+  {% if results %}
+  <div class="table-scroll">
+    <table class="data-table sortable">
+      <thead>
+        <tr>
+          <th><a href="?sort=feature">Feature</a></th>
+          <th><a href="?sort=type">Type</a></th>
+          <th>Test</th>
+          <th class="num"><a href="?sort=statistic">Statistic</a></th>
+          <th class="num"><a href="?sort=pvalue">p-value</a></th>
+          <th class="num"><a href="?sort=psi">PSI</a></th>
+          <th class="num"><a href="?sort=jsd">JSD</a></th>
+          <th><a href="?sort=status">Status</a></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr class="clickable" onclick="location.href='{% url 'monitoring:feature_detail' run.pk r.feature_name %}'">
+          <td><strong>{{ r.feature_name }}</strong></td>
+          <td>{{ r.feature_type|title }}</td>
+          <td>{{ r.test_name|test_label }}</td>
+          <td class="num">{{ r.test_statistic|floatformat:3|default:"—" }}</td>
+          <td class="num">{{ r.p_value|pvalue }}</td>
+          <td class="num">{{ r.psi|floatformat:3|default:"—" }}</td>
+          <td class="num">{{ r.jsd|floatformat:3|default:"—" }}</td>
+          <td>{% status_badge r.status %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="empty-state">No features were analysed in this run.</p>
+  {% endif %}
+</div>
+
+<div class="two-col">
+  {# ── Performance ──────────────────────────────────────────────── #}
+  <div class="card">
+    <h3>Performance</h3>
+    {% if performance.labels_available %}
+      <table class="data-table">
+        <tbody>
+          <tr><td>Accuracy</td><td class="num">{{ performance.accuracy|floatformat:4 }}</td></tr>
+          <tr><td>Error rate</td><td class="num">{{ performance.error_rate|floatformat:4 }}</td></tr>
+          <tr><td>Precision ({{ performance.positive_class }})</td><td class="num">{{ performance.precision_positive|floatformat:4|default:"—" }}</td></tr>
+          <tr><td>Recall ({{ performance.positive_class }})</td><td class="num">{{ performance.recall_positive|floatformat:4|default:"—" }}</td></tr>
+          <tr><td>F1 ({{ performance.positive_class }})</td><td class="num">{{ performance.f1_positive|floatformat:4|default:"—" }}</td></tr>
+          <tr><td>F1 (macro)</td><td class="num">{{ performance.f1_macro|floatformat:4 }}</td></tr>
+          <tr><td>Rows scored</td><td class="num">{{ performance.sample_count }}</td></tr>
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">
+        <strong>No labels in this batch.</strong><br>
+        Accuracy cannot be measured without ground truth, so it is recorded as
+        unavailable rather than as zero. Drift, data quality and the prediction
+        mix were all still analysed.
+      </p>
+    {% endif %}
+
+    <h4>Prediction mix</h4>
+    <table class="data-table">
+      <tbody>
+        {% for cls, count in performance.prediction_distribution.counts.items %}
+        <tr><td>{{ cls }}</td><td class="num">{{ count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Data quality ─────────────────────────────────────────────── #}
+  <div class="card">
+    <h3>Data quality <span class="muted tiny">{{ quality.quality_score }}/100</span></h3>
+    <table class="data-table">
+      <tbody>
+        <tr><td>Missing values</td><td class="num">{{ quality.missing_total }} ({{ quality.missing_pct|floatformat:2 }}%)</td></tr>
+        <tr><td>Duplicate rows</td><td class="num">{{ quality.duplicate_rows }} ({{ quality.duplicate_pct|floatformat:2 }}%)</td></tr>
+        <tr><td>Outliers</td><td class="num">{{ quality.outlier_pct|floatformat:2 }}%</td></tr>
+        <tr><td>Columns with unseen categories</td><td class="num">{{ quality.unseen_category_columns|length }}</td></tr>
+        <tr><td>Type mismatches</td><td class="num">{{ quality.type_mismatch_columns|length }}</td></tr>
+      </tbody>
+    </table>
+
+    {% if quality.unseen_category_columns %}
+      <h4>Values never seen in the baseline</h4>
+      <ul class="plain">
+        {% for column, values in quality.unseen_category_columns.items %}
+          <li><code>{{ column }}</code> — {{ values|join:", " }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <h4>Score breakdown</h4>
+    <table class="data-table">
+      <tbody>
+        {% for name, penalty in quality.penalties.items %}
+        <tr><td>{{ name|cut:"_"|title }}</td><td class="num">−{{ penalty|floatformat:2 }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if alerts %}
+<div class="card">
+  <h3>Alerts raised by this run</h3>
+  <ul class="plain">
+    {% for alert in alerts %}
+      <li>
+        {% status_badge alert.severity %}
+        <a href="{% url 'alerts:detail' alert.pk %}">{{ alert.headline }}</a>
+        {% if alert.occurrence_count > 1 %}<span class="muted tiny">seen ×{{ alert.occurrence_count }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+{% load monitoring_extras %}
+
+{% block title %}{{ result.feature_name }} · Run #{{ run.pk }}{% endblock %}
+{% block header_title %}{{ result.feature_name }}{% endblock %}
+
+{% block content %}
+<p class="breadcrumb">
+  <a href="{% url 'registry:list' %}">Models</a> /
+  <a href="{% url 'registry:overview' ml_model.slug %}">{{ ml_model.name }}</a> /
+  <a href="{% url 'monitoring:run_detail' run.pk %}">Run #{{ run.pk }}</a> /
+  {{ result.feature_name }}
+</p>
+
+<div class="card">
+  <div class="run-meta">
+    <span><strong>{{ result.feature_name }}</strong></span>
+    <span>{{ result.feature_type|title }}</span>
+    <span>{{ result.test_name|test_label }} test</span>
+    {% status_badge result.status %}
+  </div>
+</div>
+
+{# ── Distribution comparison — FR-07.3 ──────────────────────────── #}
+<div class="card">
+  <h3>Distribution: baseline vs this batch</h3>
+  <div class="chart-container"><canvas id="distributionChart"></canvas></div>
+
+  <details class="table-view">
+    <summary>View as table</summary>
+    <div id="distributionTable" class="table-scroll"></div>
+  </details>
+</div>
+
+<div class="two-col">
+  {# ── Summary statistics ───────────────────────────────────────── #}
+  <div class="card">
+    <h3>Summary</h3>
+    <table class="data-table">
+      <thead><tr><th>Statistic</th><th class="num">Baseline</th><th class="num">This batch</th></tr></thead>
+      <tbody>
+        {% for row in summary_rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="num">{% if row.baseline is not None %}{{ row.baseline|floatformat:2 }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.current is not None %}{{ row.current|floatformat:2 }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Scores ───────────────────────────────────────────────────── #}
+  <div class="card">
+    <h3>Scores</h3>
+    <table class="data-table">
+      <tbody>
+        <tr>
+          <td>{{ result.test_name|test_label }} statistic</td>
+          <td class="num">{{ result.test_statistic|floatformat:3|default:"—" }}</td>
+        </tr>
+        <tr><td>p-value</td><td class="num">{{ result.p_value|pvalue }}</td></tr>
+        <tr>
+          <td>PSI</td>
+          <td class="num">{{ result.psi|floatformat:3|default:"—" }}
+            <span class="muted tiny">high &gt; {{ run.thresholds_snapshot.psi_high }}</span>
+          </td>
+        </tr>
+        <tr>
+          <td>JSD</td>
+          <td class="num">{{ result.jsd|floatformat:3|default:"—" }}
+            <span class="muted tiny">high &gt; {{ run.thresholds_snapshot.jsd_high }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted tiny">
+      Thresholds shown are the ones this run was judged under. Changing them today
+      does not alter this result.
+    </p>
+  </div>
+</div>
+
+{# ── The explanation — FR-14, the differentiating feature ───────── #}
+<div class="card explanation">
+  <h3>Why this is flagged</h3>
+  <p>{{ result.explanation }}</p>
+  {% if result.unseen_categories %}
+    <p class="muted tiny">
+      Categories absent from the baseline: {{ result.unseen_categories|join:", " }}
+    </p>
+  {% endif %}
+</div>
+
+{# ── This feature over recent runs ──────────────────────────────── #}
+{% if history %}
+<div class="card">
+  <h3>This feature across the last {{ history|length }} run{{ history|length|pluralize }}</h3>
+  <div class="sparkline">
+    {% for item in history %}
+      <a href="{% url 'monitoring:feature_detail' item.run.pk result.feature_name %}"
+         class="spark spark-{{ item.status|lower }}"
+         title="Run #{{ item.run.pk }} · {{ item.status }} · PSI {{ item.psi|floatformat:3 }}"
+         aria-label="Run {{ item.run.pk }}: {{ item.status }}"></a>
+    {% endfor %}
+  </div>
+  <p class="muted tiny">Oldest on the left. Hover a marker for its run.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  fetch("{% url 'monitoring:feature_distribution_api' run.pk result.feature_name %}")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      DriftGuardCharts.createDistributionChart(
+        "distributionChart", data.labels, data.baseline, data.current
+      );
+      // The table view is required, not optional: two light-mode series colours
+      // sit below 3:1 contrast, and this is what makes that acceptable.
+      var rows = data.labels.map(function (label, i) {
+        return [label, data.baseline[i], data.current[i]];
+      });
+      DriftGuardCharts.buildTableView(
+        "distributionTable",
+        ["Bin", "Baseline (" + data.unit + ")", "This batch (" + data.unit + ")"],
+        rows
+      );
+    });
+})();
+</script>
+{% endblock %}

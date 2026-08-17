@@ -83,6 +83,31 @@
   --r-md: 8px;
   --r-lg: 12px;
   --r-full: 999px;
+
+  /* ── Compatibility aliases ──────────────────────────────────────────
+   * Templates written before this file was rebuilt reference these names.
+   * They are defined once, here, as references to the role tokens above —
+   * custom properties resolve lazily, so an alias automatically picks up the
+   * dark-mode value of whatever it points at. Defining them again in the dark
+   * blocks would be redundant and would drift.
+   */
+  --font-family: var(--font-sans);
+  --bg-primary: var(--bg-page);
+  --bg-surface-hover: var(--bg-hover);
+  --border-color: var(--border);
+  --accent-primary: var(--brand);
+  --accent-secondary: var(--brand-hover);
+  --accent-gradient: linear-gradient(135deg, var(--brand) 0%, var(--brand-hover) 100%);
+
+  /* Status aliases. These are NOT re-declared per theme, because the status
+   * palette is deliberately mode-invariant (§2.3) — only the text steps change.
+   */
+  --color-healthy: var(--status-good);
+  --color-warning: var(--status-warning);
+  --color-critical: var(--status-critical);
+  --color-healthy-bg: rgba(12, 163, 12, 0.12);
+  --color-warning-bg: rgba(250, 178, 25, 0.14);
+  --color-critical-bg: rgba(208, 59, 59, 0.12);
 }
 
 /* ── Dark values, defined once and applied in two scopes ───────────────

@@ -377,6 +377,12 @@ def _analyse_numeric(
     n_baseline = int(profile_entry["summary"]["count"])
     n_current = int(batch_series.notna().sum())
 
+    # The batch's counts over the BASELINE's bin edges. Carried on the summary so
+    # the distribution chart can be drawn later, when the batch data itself is
+    # long gone — the comparison is only meaningful on shared edges.
+    current_summary = profiling.summarise_numeric(batch_series)
+    current_summary["bin_counts"] = current_counts
+
     return {
         "feature_name": column,
         "feature_type": C.NUMERIC,
@@ -389,7 +395,7 @@ def _analyse_numeric(
             psi, jsd, p_value, n_baseline, n_current, thresholds
         ),
         "baseline_summary": profile_entry["summary"],
-        "current_summary": profiling.summarise_numeric(batch_series),
+        "current_summary": current_summary,
         "unseen_categories": [],
     }
 

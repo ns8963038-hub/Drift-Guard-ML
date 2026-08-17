@@ -7,4 +7,6 @@ urlpatterns = [
     path("", include("accounts.urls")),
     path("models/", include("registry.urls")),
     path("alerts/", include("alerts.urls")),
+    path("models/", include("datasets.urls")),
+    path("", include("monitoring.urls")),
 ]

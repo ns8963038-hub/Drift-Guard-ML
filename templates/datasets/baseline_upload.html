@@ -1,0 +1,36 @@
+{% extends "registry/model_tab_shell.html" %}
+{% block tab_content %}
+<div class="card">
+  <h2>Upload baseline dataset</h2>
+  <p class="muted">
+    The baseline is the training data this model is judged against. It is profiled
+    once, here — every later monitoring run compares incoming batches to the stored
+    profile, so this file defines what "normal" means for {{ ml_model.name }}.
+  </p>
+
+  {% if existing %}
+    <div class="alert-banner warning">
+      A baseline already exists: <strong>{{ existing.row_count|floatformat:0 }} rows</strong>,
+      uploaded {{ existing.created_at|date:"j M Y" }}. Uploading a new one replaces it
+      as the reference for future runs. Existing runs keep the profile they were judged against.
+    </div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label>CSV file
+      <input type="file" name="dataset" accept=".csv" required>
+    </label>
+    <label>Target column
+      <input type="text" name="target_column" value="{{ ml_model.target_column }}" required>
+      <span class="muted tiny">The column holding the true label.</span>
+    </label>
+    <p class="muted tiny">
+      Needs at least 100 rows and at least two distinct values in the target column.
+      Identifier and constant columns are detected and excluded automatically; you can
+      review them afterwards.
+    </p>
+    <button type="submit" class="btn btn-primary">Upload and profile</button>
+  </form>
+</div>
+{% endblock %}
