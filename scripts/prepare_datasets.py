@@ -102,7 +102,9 @@ def load_telco(force: bool) -> tuple[pd.DataFrame, str]:
     blank_count = int(df["TotalCharges"].isna().sum())
     df["TotalCharges"] = df["TotalCharges"].fillna(0.0)
     if blank_count:
-        print(f"  cleaned {blank_count} blank TotalCharges values (tenure=0 rows) -> 0.0")
+        print(
+            f"  cleaned {blank_count} blank TotalCharges values (tenure=0 rows) -> 0.0"
+        )
 
     # customerID is kept deliberately. It is a perfect example of a column the
     # platform must auto-suggest for exclusion from drift monitoring.

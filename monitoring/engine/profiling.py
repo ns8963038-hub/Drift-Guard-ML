@@ -69,7 +69,9 @@ def suggest_exclusion(series: pd.Series, column: str) -> str | None:
 
     # A column that is unique for (nearly) every row identifies rows rather than
     # describing them. 99% rather than 100% tolerates a handful of duplicates.
-    if non_null.nunique() >= 0.99 * len(non_null) and not pd.api.types.is_float_dtype(series):
+    if non_null.nunique() >= 0.99 * len(non_null) and not pd.api.types.is_float_dtype(
+        series
+    ):
         return "Appears to be an identifier — one distinct value per row"
 
     if _ID_NAME_PATTERN.search(column):
@@ -246,11 +248,9 @@ def summarise_categorical(series: pd.Series) -> dict[str, Any]:
         "missing_pct": round(100.0 * missing / total, 4) if total else 0.0,
         "n_unique": int(counts.size),
         "categories": {str(k): int(v) for k, v in counts.items()},
-        "proportions": {
-            str(k): float(v / observed) for k, v in counts.items()
-        }
-        if observed
-        else {},
+        "proportions": (
+            {str(k): float(v / observed) for k, v in counts.items()} if observed else {}
+        ),
     }
 
 
