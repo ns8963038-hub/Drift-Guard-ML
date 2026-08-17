@@ -37,6 +37,7 @@ from django.utils import timezone  # noqa: E402
 from accounts.models import ModelAccess, User  # noqa: E402
 from alerts.models import Alert, ThresholdProfile  # noqa: E402
 from core.constants import Permission, ProblemType, Role, VersionStatus  # noqa: E402
+from core.media import prune_orphaned_media  # noqa: E402
 from datasets.services import create_baseline_dataset  # noqa: E402
 from monitoring.models import MonitoringRun  # noqa: E402
 from monitoring.services import compute_baseline_prediction_distribution  # noqa: E402
@@ -86,6 +87,13 @@ def reset():
     log("removing existing demo data")
     MLModel.objects.filter(slug__in=[c["slug"] for c in MODELS.values()]).delete()
     User.objects.filter(username__in=[u[0] for u in USERS]).delete()
+
+    # Deleting the rows leaves their uploads behind — Django does not touch the
+    # files. Every reseed used to add another full set, so media/ grew without
+    # limit and the dead files rode along in the release bundle.
+    removed, freed = prune_orphaned_media()
+    if removed:
+        log(f"removed {removed} orphaned media file(s), {freed / 1e6:.1f} MB")
 
 
 def seed_users():
