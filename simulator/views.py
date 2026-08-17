@@ -52,6 +52,7 @@ def scenario_list_view(request, slug):
             "categorical_columns": categorical,
             "has_baseline": baseline is not None,
             "tab": "simulator",
+            "nav": "models",
         },
     )
 

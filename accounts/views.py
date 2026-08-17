@@ -90,7 +90,7 @@ def profile_view(request):
     else:
         form = PasswordChangeForm(user=request.user)
 
-    return render(request, "accounts/profile.html", {"form": form})
+    return render(request, "accounts/profile.html", {"form": form, "nav": "profile"})
 
 
 @login_required
@@ -98,7 +98,9 @@ def user_list_view(request):
     if request.user.role != Role.ADMIN and not request.user.is_superuser:
         raise PermissionDenied("Admin role required.")
     users = User.objects.all().order_by("-date_joined")
-    return render(request, "accounts/admin_users.html", {"users": users})
+    return render(
+        request, "accounts/admin_users.html", {"users": users, "nav": "users"}
+    )
 
 
 @login_required
@@ -121,7 +123,7 @@ def user_create_edit_view(request, user_id=None):
                 return render(
                     request,
                     "accounts/admin_user_form.html",
-                    {"target_user": target_user, "roles": Role.choices},
+                    {"target_user": target_user, "roles": Role.choices, "nav": "users"},
                 )
             target_user = User.objects.create_user(
                 username=username,
@@ -146,7 +148,7 @@ def user_create_edit_view(request, user_id=None):
     return render(
         request,
         "accounts/admin_user_form.html",
-        {"target_user": target_user, "roles": Role.choices},
+        {"target_user": target_user, "roles": Role.choices, "nav": "users"},
     )
 
 
@@ -194,6 +196,7 @@ def access_grants_view(request):
             "users": users,
             "models": models,
             "permissions": Permission.choices,
+            "nav": "access",
         },
     )
 
@@ -204,4 +207,8 @@ def login_activity_view(request):
         raise PermissionDenied("Admin role required.")
 
     activities = LoginActivity.objects.select_related("user").all()[:200]
-    return render(request, "accounts/admin_activity.html", {"activities": activities})
+    return render(
+        request,
+        "accounts/admin_activity.html",
+        {"activities": activities, "nav": "activity"},
+    )

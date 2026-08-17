@@ -28,6 +28,7 @@ def alert_list_view(request):
         request,
         "alerts/alert_list.html",
         {
+            "nav": "alerts",
             "alerts": alerts,
             "status_choices": AlertStatus.choices,
             "severity_choices": AlertSeverity.choices,
@@ -174,5 +175,7 @@ def retrain_recommendations_view(request):
         return redirect("alerts:recommendations")
 
     return render(
-        request, "alerts/recommendations.html", {"recommendations": recommendations}
+        request,
+        "alerts/recommendations.html",
+        {"recommendations": recommendations, "nav": "recommendations"},
     )

@@ -112,3 +112,47 @@ def test_email_failure_swallowed():
     # Calling send_alert_email returns False when EMAIL_ENABLED=False without throwing any exception
     sent = send_alert_email(alert)
     assert sent is False
+
+
+@pytest.mark.django_db
+def test_escalating_alert_updates_its_headline_not_only_its_severity():
+    """A deduplicated alert must describe its latest occurrence, not its first.
+
+    Dedup refreshed ``severity`` and ``message`` but left ``headline`` alone, so
+    a feature that drifted moderately and then badly showed a WARNING headline
+    beside a CRITICAL badge on the one screen used to decide what to act on.
+    """
+    user = User.objects.create_user(username="esc", password="p", role=Role.ANALYST)
+    model = MLModel.objects.create(
+        name="Esc",
+        slug="esc",
+        target_column="t",
+        problem_type=ProblemType.BINARY,
+        owner=user,
+    )
+
+    create_or_update_alert(
+        ml_model=model,
+        category=AlertCategory.DRIFT,
+        severity=AlertSeverity.WARNING,
+        headline="Moderate drift detected — tenure",
+        message="PSI 0.14",
+        feature_name="tenure",
+        rule_code="DRIFT_MODERATE",
+    )
+    escalated = create_or_update_alert(
+        ml_model=model,
+        category=AlertCategory.DRIFT,
+        severity=AlertSeverity.CRITICAL,
+        headline="High drift detected — tenure",
+        message="PSI 0.41",
+        feature_name="tenure",
+        rule_code="DRIFT_HIGH",
+    )
+
+    assert Alert.objects.filter(ml_model=model).count() == 1, "must deduplicate"
+    assert escalated.occurrence_count == 2
+    assert escalated.severity == AlertSeverity.CRITICAL
+    assert escalated.headline == "High drift detected — tenure"
+    assert escalated.rule_code == "DRIFT_HIGH"
+    assert escalated.message == "PSI 0.41"

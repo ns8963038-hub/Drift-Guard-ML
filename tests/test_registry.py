@@ -99,3 +99,93 @@ def test_version_activation_single_active_constraint(client):
     assert v1.status == VersionStatus.INACTIVE
     assert v2.status == VersionStatus.ACTIVE
     assert model.active_version == v2
+
+
+@pytest.mark.django_db
+def test_blank_name_is_rejected_instead_of_creating_an_unreachable_model(client):
+    """A model with an empty slug is unreachable at every /models/<slug>/ URL.
+
+    The view took ``slugify(name)`` on trust. An empty or punctuation-only name
+    slugifies to "", which the database accepts — producing a row that no URL
+    in the application can ever resolve to.
+    """
+    User.objects.create_user(username="ds1", password="p", role=Role.DATA_SCIENTIST)
+    client.login(username="ds1", password="p")
+    url = reverse("registry:create")
+
+    for bad_name in ["", "   ", "..."]:
+        response = client.post(
+            url,
+            {
+                "name": bad_name,
+                "target_column": "Churn",
+                "problem_type": ProblemType.BINARY,
+            },
+        )
+        assert (
+            response.status_code == 200
+        ), f"{bad_name!r} should re-render, not redirect"
+        assert not MLModel.objects.filter(slug="").exists()
+
+    assert MLModel.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_missing_target_column_is_rejected(client):
+    """Without a target column no run can score accuracy or exclude the label."""
+    User.objects.create_user(username="ds2", password="p", role=Role.DATA_SCIENTIST)
+    client.login(username="ds2", password="p")
+
+    response = client.post(
+        reverse("registry:create"),
+        {"name": "No Target", "target_column": "", "problem_type": ProblemType.BINARY},
+    )
+    assert response.status_code == 200
+    assert MLModel.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_rejected_submission_comes_back_filled_in(client):
+    """A duplicate name used to return an empty form, discarding everything typed."""
+    user = User.objects.create_user(
+        username="ds3", password="p", role=Role.DATA_SCIENTIST
+    )
+    MLModel.objects.create(
+        name="Churn Model",
+        slug="churn-model",
+        target_column="Churn",
+        problem_type=ProblemType.BINARY,
+        owner=user,
+    )
+    client.login(username="ds3", password="p")
+
+    response = client.post(
+        reverse("registry:create"),
+        {
+            "name": "Churn Model",
+            "description": "A description worth not losing",
+            "target_column": "Churn",
+            "positive_class": "Yes",
+            "problem_type": ProblemType.BINARY,
+        },
+    )
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "already exists" in body
+    assert "A description worth not losing" in body
+    assert 'value="Churn Model"' in body
+    assert 'value="Yes"' in body
+
+
+@pytest.mark.django_db
+def test_register_button_is_shown_only_to_roles_that_may_create(client):
+    """The button linked to href="#", so it was visible to all and worked for none."""
+    create_url = reverse("registry:create")
+
+    User.objects.create_user(username="ds4", password="p", role=Role.DATA_SCIENTIST)
+    client.login(username="ds4", password="p")
+    assert create_url in client.get(reverse("registry:list")).content.decode()
+
+    User.objects.create_user(username="an4", password="p", role=Role.ANALYST)
+    client.login(username="an4", password="p")
+    assert create_url not in client.get(reverse("registry:list")).content.decode()

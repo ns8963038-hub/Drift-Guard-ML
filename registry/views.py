@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from registry.models import MLModel, ModelVersion, ModelAuditLog
 from registry.services import create_model_version, activate_version
 from accounts.models import ModelAccess
-from core.constants import ProblemType, Permission
+from core.constants import ProblemType, Permission, RunStatus
 from core.mixins import visible_models, role_required, model_permission_required
 from core.constants import Role
 from core.validators import (
@@ -20,8 +20,52 @@ from core.validators import (
 
 @login_required
 def model_list_view(request):
-    models = visible_models(request.user)
-    return render(request, "registry/model_list.html", {"models": models})
+    models = visible_models(request.user).select_related("owner")
+
+    # The list used to render name + description and a hardcoded "Active" badge.
+    # Health, drift and the active version are the reason to open this screen at
+    # all, so they are resolved here rather than left to a per-row template hit.
+    rows = []
+    for ml_model in models:
+        rows.append(
+            {
+                "model": ml_model,
+                "run": ml_model.runs.filter(status=RunStatus.COMPLETED)
+                .order_by("-created_at")
+                .first(),
+                "version": ml_model.versions.filter(status="ACTIVE").first(),
+                "version_count": ml_model.versions.count(),
+            }
+        )
+    rows.sort(key=lambda r: (r["run"].health_score if r["run"] else 101))
+
+    return render(
+        request,
+        "registry/model_list.html",
+        {"models": models, "rows": rows, "nav": "models"},
+    )
+
+
+def _form_context(ml_model, values=None):
+    """Context for the model form, from one place.
+
+    The template previously chained ``|default:`` onto ``ml_model.name``, which
+    blows up while creating because ``ml_model`` is None at that point.
+    """
+    if values is None:
+        values = {
+            "name": ml_model.name if ml_model else "",
+            "description": ml_model.description if ml_model else "",
+            "target_column": ml_model.target_column if ml_model else "",
+            "positive_class": (ml_model.positive_class if ml_model else "") or "",
+            "problem_type": ml_model.problem_type if ml_model else ProblemType.BINARY,
+        }
+    return {
+        "ml_model": ml_model,
+        "problem_types": ProblemType.choices,
+        "values": values,
+        "nav": "models",
+    }
 
 
 @login_required
@@ -42,17 +86,41 @@ def model_create_edit_view(request, slug=None):
         positive_class = request.POST.get("positive_class", "").strip() or None
         problem_type = request.POST.get("problem_type", ProblemType.BINARY)
 
+        # Re-rendering the form after an error used to pass ``ml_model``, which is
+        # None while creating — so every rejected submission came back blank and
+        # everything had to be retyped.
+        def _reject(message):
+            messages.error(request, message)
+            return render(
+                request,
+                "registry/model_form.html",
+                _form_context(
+                    ml_model,
+                    {
+                        "name": name,
+                        "description": description,
+                        "target_column": target_column,
+                        "positive_class": positive_class or "",
+                        "problem_type": problem_type,
+                    },
+                ),
+            )
+
+        if not name:
+            return _reject("A model name is required.")
+        if not target_column:
+            return _reject("A target column is required.")
+
         if not ml_model:
             model_slug = slugify(name)
+            # slugify("...") is empty, and an empty slug would make the model
+            # unreachable at every /models/<slug>/ URL it owns.
+            if not model_slug:
+                return _reject(
+                    "That name produces an empty URL. Use at least one letter or number."
+                )
             if MLModel.objects.filter(slug=model_slug).exists():
-                messages.error(
-                    request, f"A model with slug '{model_slug}' already exists."
-                )
-                return render(
-                    request,
-                    "registry/model_form.html",
-                    {"ml_model": ml_model, "problem_types": ProblemType.choices},
-                )
+                return _reject(f"A model with slug '{model_slug}' already exists.")
             ml_model = MLModel.objects.create(
                 name=name,
                 slug=model_slug,
@@ -85,11 +153,7 @@ def model_create_edit_view(request, slug=None):
 
         return redirect("registry:overview", slug=ml_model.slug)
 
-    return render(
-        request,
-        "registry/model_form.html",
-        {"ml_model": ml_model, "problem_types": ProblemType.choices},
-    )
+    return render(request, "registry/model_form.html", _form_context(ml_model))
 
 
 @login_required
@@ -105,6 +169,7 @@ def model_overview_view(request, slug):
             "active_ver": active_ver,
             "audit_logs": audit_logs,
             "tab": "overview",
+            "nav": "models",
         },
     )
 
@@ -211,6 +276,7 @@ def version_comparison_view(request, slug):
             "verdict": verdict,
             "schema_compatible": schema_compatible,
             "tab": "versions",
+            "nav": "models",
         },
     )
 
@@ -350,6 +416,7 @@ def monitoring_history_view(request, slug):
             "filters": filters,
             "total": runs.count(),
             "tab": "history",
+            "nav": "models",
         },
     )
 
@@ -432,5 +499,6 @@ def model_train_view(request, slug):
                 for key, spec in ALGORITHMS.items()
             ],
             "tab": "versions",
+            "nav": "models",
         },
     )

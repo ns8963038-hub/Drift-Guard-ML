@@ -107,21 +107,39 @@ because it is the easiest thing to demonstrate and the hardest to fake.
 
 Log in with **`admin` / `driftguard123`**.
 
+The sign-in page lists all three demo accounts on the right — click one and it
+fills the form for you.
+
+> **Why there is no "log in as…" role dropdown.** A picker that let you choose
+> your own role at sign-in would let anyone claim any privilege. The role
+> belongs to the account and the server decides; the accounts are simply listed
+> so all three are quick to try.
+
 ☑ You land on a dashboard showing **Monitored Models 2**, **Registered Users 3**,
 an alert count and an open retraining recommendation.
 
-☑ The sidebar shows Dashboard, Models and Alerts.
+☑ A banner under the heading states what this account may do, beginning
+**"You administer this platform."** Each role gets a different sentence there.
+
+☑ The sidebar is grouped into three sections — **Monitoring**, **Administration**
+and **Account** — with your username and a red *Admin* chip above them. The
+Administration section is the part the other two roles will not have.
+
+☑ A panel titled **Recent sign-in activity** appears under the model list. Only
+the Administrator sees it.
 
 ### 2.2 Look at what only an Admin can do
 
-Visit each of these:
-
-- http://127.0.0.1:8000/admin-panel/users/
-- http://127.0.0.1:8000/admin-panel/access/
-- http://127.0.0.1:8000/admin-panel/activity/
+Click **Users**, **Access grants** and **Login activity** in the sidebar's
+Administration section. (Direct URLs, if you would rather type them:
+`/admin-panel/users/`, `/admin-panel/access/`, `/admin-panel/activity/`.)
 
 ☑ All three load. The activity log shows your own login just now, with an IP
 address and browser string.
+
+> These screens existed from the beginning but nothing linked to them, so they
+> could only be reached by typing the URL. The sidebar now links them, and only
+> for the role that may use them.
 
 **What is happening.** Every login success, failure and logout is recorded
 (requirement FR-01.5). This is the audit trail.
@@ -129,6 +147,10 @@ address and browser string.
 ### 2.3 Now sign in as the Analyst — the important test
 
 Log out. Log in as **`mleng` / `driftguard123`**.
+
+☑ The sidebar has **no Administration section at all** — no Users, no Access
+grants, no Login activity. The role chip beside your username reads *Analyst*
+in green, and the banner now says **"You work the monitoring output."**
 
 ☑ Go to http://127.0.0.1:8000/admin-panel/users/ → **403 Forbidden.**
 
@@ -145,10 +167,13 @@ is not access control; this is.
 
 ### 2.4 What the Analyst *can* do
 
-☑ Open Customer Churn Model → the **Upload Batch** button is present.
+☑ Open Customer Churn Model → **Upload batch** is the only button in the header.
 
-☑ But **Train Model**, **Upload Baseline** and the **Thresholds** and
-**Simulator** tabs are absent or refuse access.
+☑ **Edit**, **Train model** and **Upload version** are gone, and so are the
+**Baseline**, **Thresholds** and **Simulator** tabs — seven tabs instead of ten.
+
+☑ On the Models screen there is no **+ Register new model** button, and
+`/models/new/` returns **403** if you type it.
 
 **Why that split.** Feeding production data in is the Analyst's job. Defining
 the reference the model is judged against, and configuring the thresholds, are
@@ -159,7 +184,15 @@ Data Scientist decisions. This mirrors how the roles work in a real team.
 Log out, log in as **`dsci` / `driftguard123`**. Stay signed in as this user for
 the rest of the walkthrough.
 
-☑ You can see both models and every tab.
+☑ You can see both models and all ten tabs, and **+ Register new model** is
+back in the header.
+
+☑ Still no Administration section — creating users is not a Data Scientist's
+job. The banner reads **"You own models."**
+
+**Compare the three.** Same code, same templates, three genuinely different
+screens: the Admin has 8 sidebar links, the Data Scientist and Analyst 5; the
+Admin and Data Scientist get 4 header actions on a model, the Analyst 1.
 
 ---
 

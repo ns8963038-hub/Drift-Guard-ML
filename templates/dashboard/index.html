@@ -1,100 +1,203 @@
 {% extends "base.html" %}
 {% load monitoring_extras %}
 
-{% block header_title %}Dashboard ({{ user.get_role_display }}){% endblock %}
+{% block title %}Dashboard · DriftGuard{% endblock %}
+{% block header_title %}Dashboard{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">Signed in as {{ user.username }} · {{ role_label }}</p>
+{% endblock %}
+
+{% block header_actions %}
+  {% if can_create_models %}
+    <a href="{% url 'registry:create' %}" class="btn btn-primary">+ Register model</a>
+  {% endif %}
+  <a href="{% url 'alerts:list' %}" class="btn btn-secondary">Alert queue</a>
+{% endblock %}
 
 {% block content %}
-<!-- Top Metrics Overview Grid -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
-    <div class="card" style="margin-bottom: 0;">
-        <div style="color: var(--text-secondary); font-size: 0.875rem;">Monitored Models</div>
-        <div style="font-size: 2rem; font-weight: 700; margin-top: 0.25rem;">{{ total_models }}</div>
-    </div>
-    <div class="card" style="margin-bottom: 0;">
-        <div style="color: var(--text-secondary); font-size: 0.875rem;">Active Unresolved Alerts</div>
-        <div style="font-size: 2rem; font-weight: 700; color: var(--color-warning); margin-top: 0.25rem;">{{ active_alerts_count }}</div>
-    </div>
-    <div class="card" style="margin-bottom: 0;">
-        <div style="color: var(--text-secondary); font-size: 0.875rem;">Open Retrain Recommendations</div>
-        <div style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.25rem;">{{ open_recommendations_count }}</div>
-    </div>
-    {% if total_users %}
-        <div class="card" style="margin-bottom: 0;">
-            <div style="color: var(--text-secondary); font-size: 0.875rem;">Registered Users</div>
-            <div style="font-size: 2rem; font-weight: 700; margin-top: 0.25rem;">{{ total_users }}</div>
-        </div>
+
+{% comment %}
+The banner states what this account is for. Three roles that show the same
+   screen with the same buttons teach the reader that the roles are decorative,
+   when in fact they decide what the server will accept.
+{% endcomment %}
+<div class="role-banner">
+  <span class="role-chip role-{{ role_slug }}">{{ role_label }}</span>
+  <span>
+    {% if can_manage_users %}
+      <strong>You administer this platform.</strong> You can see every model
+      regardless of ownership, create and deactivate users, grant or revoke
+      per-model access, and read the login audit trail.
+    {% elif can_create_models %}
+      <strong>You own models.</strong> You can register models, train and upload
+      versions, set the drift and performance thresholds that decide when an
+      alert fires, and run the simulator. User administration is not yours.
+    {% else %}
+      <strong>You work the monitoring output.</strong> You can upload production
+      batches, read every chart and explanation, and acknowledge or resolve
+      alerts on the models you have been granted. Models and thresholds are
+      configured by their owner.
     {% endif %}
+  </span>
 </div>
 
-<!-- Composition Content per Role -->
-<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
-    <div>
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3>Recent Monitored Models</h3>
-                <a href="{% url 'registry:list' %}" style="font-size: 0.875rem;">View All Models &rarr;</a>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                {% for card in cards %}
-                    <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
-                            <div>
-                                <h4 style="font-size: 1rem;">
-                                    <a href="{% url 'registry:overview' card.model.slug %}">{{ card.model.name }}</a>
-                                </h4>
-                                <p class="muted tiny">
-                                    Target: <code>{{ card.model.target_column }}</code>
-                                    {% if card.version %}· {{ card.version.label }} active{% else %}· no active version{% endif %}
-                                </p>
-                            </div>
-                            {% if card.run %}
-                                {% status_badge card.run.health_band %}
-                            {% else %}
-                                <span class="badge badge-muted">– Not yet monitored</span>
-                            {% endif %}
-                        </div>
+<div class="stat-grid">
+  <div class="stat-card is-brand">
+    <span class="stat-head">{% if can_manage_users %}Monitored models{% else %}Models you can see{% endif %}</span>
+    <span class="stat-num">{{ total_models }}</span>
+    <a href="{% url 'registry:list' %}" class="stat-foot">Open the registry &rarr;</a>
+  </div>
 
-                        {% if card.run %}
-                        <div style="display:flex; gap:1.5rem; margin-top:0.75rem; align-items:center;">
-                            <span><strong style="font-size:1.25rem;">{{ card.run.health_score }}</strong><span class="muted tiny">/100</span></span>
-                            {% status_badge card.run.overall_drift_status %}
-                            <span class="muted tiny">{{ card.run.features_high }} high · {{ card.run.features_moderate }} moderate</span>
-                            <span class="muted tiny">{{ card.run.created_at|timesince }} ago</span>
-                        </div>
-                        <div class="meter" style="margin-top:0.5rem;"><span style="width:{{ card.run.health_score }}%"></span></div>
-                        {% else %}
-                        <p class="muted tiny" style="margin-top:0.5rem;">
-                            No monitoring runs yet — upload a batch or start the simulator.
-                        </p>
-                        {% endif %}
-                    </div>
-                {% empty %}
-                    <p class="empty-state">
-                        <strong>No models yet.</strong><br>
-                        Create one to start monitoring.
-                    </p>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+  <div class="stat-card {% if active_alerts_count %}is-critical{% else %}is-good{% endif %}">
+    <span class="stat-head">Unresolved alerts</span>
+    <span class="stat-num">{{ active_alerts_count }}</span>
+    <a href="{% url 'alerts:list' %}" class="stat-foot">
+      {% if active_alerts_count %}Work the queue &rarr;{% else %}Nothing outstanding{% endif %}
+    </a>
+  </div>
 
-    <div>
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3>Active Alerts</h3>
-                <a href="{% url 'alerts:list' %}" style="font-size: 0.875rem;">View All &rarr;</a>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                {% for a in alerts %}
-                    <div style="padding: 0.75rem; border-left: 3px solid var(--color-warning); background-color: var(--bg-primary); border-radius: 0.25rem;">
-                        <div style="font-weight: 600; font-size: 0.875rem;"><a href="{% url 'alerts:detail' a.id %}">{{ a.headline }}</a></div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">{{ a.ml_model.name }} · {{ a.last_seen_at|date:"H:i" }}</div>
-                    </div>
-                {% empty %}
-                    <p style="color: var(--text-secondary);">No active alerts.</p>
-                {% endfor %}
-            </div>
-        </div>
+  <div class="stat-card {% if open_recommendations_count %}is-warning{% else %}is-good{% endif %}">
+    <span class="stat-head">Retrain recommendations</span>
+    <span class="stat-num">{{ open_recommendations_count }}</span>
+    <a href="{% url 'alerts:recommendations' %}" class="stat-foot">
+      {% if open_recommendations_count %}Review the evidence &rarr;{% else %}No model is due{% endif %}
+    </a>
+  </div>
+
+  {% if can_manage_users %}
+    <div class="stat-card">
+      <span class="stat-head">Registered users</span>
+      <span class="stat-num">{{ total_users }}</span>
+      <a href="{% url 'accounts:user_list' %}" class="stat-foot">{{ active_users_today }} signed in today &rarr;</a>
     </div>
+  {% endif %}
+</div>
+
+<div class="dash-cols">
+
+  <div class="dash-stack">
+    <section class="panel">
+      <div class="panel-head">
+        <h3>
+          {% if can_manage_users %}Every monitored model
+          {% elif can_create_models %}Models you monitor
+          {% else %}Models you have access to{% endif %}
+        </h3>
+        <a href="{% url 'registry:list' %}" class="panel-link">View all &rarr;</a>
+      </div>
+      <div class="panel-body">
+        {% for card in cards %}
+          <article class="model-row">
+            <div class="model-row-top">
+              <div>
+                <a href="{% url 'registry:overview' card.model.slug %}" class="model-row-name">{{ card.model.name }}</a>
+                <p class="muted tiny">
+                  Target <code>{{ card.model.target_column }}</code>
+                  {% if card.version %}· {{ card.version.label }} active{% else %}· no active version{% endif %}
+                  {% if can_manage_users %}· owned by {{ card.model.owner.username }}{% endif %}
+                </p>
+              </div>
+              {% if card.run %}
+                {% status_badge card.run.health_band %}
+              {% else %}
+                <span class="badge badge-muted">Not yet monitored</span>
+              {% endif %}
+            </div>
+
+            {% if card.run %}
+              <div class="model-row-stats">
+                <span><span class="model-score">{{ card.run.health_score }}</span><span class="muted tiny">/100</span></span>
+                {% status_badge card.run.overall_drift_status %}
+                <span class="muted tiny">{{ card.run.features_high }} high · {{ card.run.features_moderate }} moderate</span>
+                <span class="muted tiny">{{ card.run.created_at|timesince }} ago</span>
+              </div>
+              <div class="meter meter-{{ card.run.health_band|lower }}">
+                <span style="width:{{ card.run.health_score }}%"></span>
+              </div>
+            {% else %}
+              <p class="muted tiny">
+                No monitoring runs yet —
+                {% if can_manage_models %}upload a baseline, then a batch or start the simulator.
+                {% else %}upload a production batch to produce the first run.{% endif %}
+              </p>
+            {% endif %}
+          </article>
+        {% empty %}
+          <p class="empty-state">
+            <strong>No models yet.</strong><br>
+            {% if can_create_models %}
+              Register one to start monitoring.
+            {% else %}
+              Nothing has been shared with you. An administrator grants access per model.
+            {% endif %}
+          </p>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% comment %}
+Administration-only panel. The audit trail existed from the start but had
+       nothing linking to it, so it may as well not have been there.
+{% endcomment %}
+    {% if can_manage_users %}
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Recent sign-in activity</h3>
+          <a href="{% url 'accounts:login_activity' %}" class="panel-link">Full audit trail &rarr;</a>
+        </div>
+        <div class="panel-body is-flush">
+          {% for entry in recent_activities %}
+            <div class="list-line">
+              <span>
+                <strong>{{ entry.username_attempted|default:entry.user.username }}</strong>
+                — {{ entry.get_event_display }}
+                {% if entry.ip_address %}<span class="muted">from {{ entry.ip_address }}</span>{% endif %}
+              </span>
+              <span class="muted tiny">{{ entry.occurred_at|date:"d M H:i" }}</span>
+            </div>
+          {% empty %}
+            <p class="muted tiny" style="padding:1.1rem;">No sign-in activity recorded yet.</p>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </div>
+
+  <div class="dash-stack">
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Active alerts</h3>
+        <a href="{% url 'alerts:list' %}" class="panel-link">View all &rarr;</a>
+      </div>
+      <div class="panel-body">
+        {% for a in alerts %}
+          <a href="{% url 'alerts:detail' a.id %}" class="alert-row sev-{{ a.severity|lower }}">
+            <strong>{{ a.headline }}</strong>
+            <span class="alert-meta">{{ a.ml_model.name }} · {{ a.last_seen_at|date:"d M H:i" }}</span>
+          </a>
+        {% empty %}
+          <p class="empty-state"><strong>Nothing to act on.</strong><br>No unresolved alerts.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% if recommendations %}
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Retraining suggested</h3>
+          <a href="{% url 'alerts:recommendations' %}" class="panel-link">Details &rarr;</a>
+        </div>
+        <div class="panel-body is-flush">
+          {% for rec in recommendations %}
+            <div class="list-line">
+              <span><strong>{{ rec.ml_model.name }}</strong> — {{ rec.get_severity_display }}</span>
+              <span class="muted tiny">{{ rec.created_at|date:"d M" }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

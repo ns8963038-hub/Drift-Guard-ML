@@ -1,29 +1,91 @@
 {% extends "base.html" %}
+{% load monitoring_extras %}
 
-{% block header_title %}Model Registry{% endblock %}
+{% block title %}Models · DriftGuard{% endblock %}
+{% block header_title %}Model registry{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">
+    {% if can_manage_users %}
+      Every registered model, worst health first.
+    {% elif can_create_models %}
+      Models you own or have been given access to, worst health first.
+    {% else %}
+      Models an administrator has granted you, worst health first.
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block header_actions %}
+  {% if can_create_models %}
+    <a href="{% url 'registry:create' %}" class="btn btn-primary">+ Register new model</a>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h3>Monitored Models</h3>
-        {% if user.is_authenticated %}
-            <a href="#" class="btn btn-primary">+ Register New Model</a>
-        {% endif %}
-    </div>
-    {% if models %}
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-            {% for model in models %}
-                <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h4 style="font-size: 1.1rem;">{{ model.name }}</h4>
-                        <p style="color: var(--text-secondary); font-size: 0.875rem;">{{ model.description|default:"No description provided." }}</p>
-                    </div>
-                    <span class="badge badge-healthy">Active</span>
-                </div>
-            {% endfor %}
+<div class="panel">
+  <div class="panel-body">
+    {% for row in rows %}
+      <article class="model-row">
+        <div class="model-row-top">
+          <div>
+            <a href="{% url 'registry:overview' row.model.slug %}" class="model-row-name">{{ row.model.name }}</a>
+            <p class="muted tiny">
+              Target <code>{{ row.model.target_column }}</code> ·
+              {{ row.model.get_problem_type_display }} ·
+              owner {{ row.model.owner.username }} ·
+              {{ row.version_count }} version{{ row.version_count|pluralize }}
+              {% if row.version %}({{ row.version.label }} active){% else %}(none active){% endif %}
+            </p>
+          </div>
+          <div style="display:flex; gap:0.4rem; align-items:center;">
+            {% comment %}
+This badge was hardcoded to "Active" for every row, so a deactivated
+               model looked exactly like a live one.
+{% endcomment %}
+            {% if row.model.is_active %}
+              <span class="badge badge-good">Active</span>
+            {% else %}
+              <span class="badge badge-muted">Deactivated</span>
+            {% endif %}
+            {% if row.run %}{% status_badge row.run.health_band %}{% endif %}
+          </div>
         </div>
-    {% else %}
-        <p style="color: var(--text-secondary);">No models registered yet or access restricted.</p>
-    {% endif %}
+
+        <p class="muted tiny">{{ row.model.description|default:"No description provided." }}</p>
+
+        {% if row.run %}
+          <div class="model-row-stats">
+            <span><span class="model-score">{{ row.run.health_score }}</span><span class="muted tiny">/100</span></span>
+            {% status_badge row.run.overall_drift_status %}
+            <span class="muted tiny">{{ row.run.features_high }} high · {{ row.run.features_moderate }} moderate</span>
+            <span class="muted tiny">last run {{ row.run.created_at|timesince }} ago</span>
+          </div>
+          <div class="meter meter-{{ row.run.health_band|lower }}">
+            <span style="width:{{ row.run.health_score }}%"></span>
+          </div>
+        {% else %}
+          <p class="muted tiny">
+            Never monitored.
+            {% if can_manage_models %}
+              Upload a baseline, then a production batch or run the simulator.
+            {% else %}
+              Upload a production batch to produce the first run.
+            {% endif %}
+          </p>
+        {% endif %}
+      </article>
+    {% empty %}
+      <p class="empty-state">
+        {% if can_create_models %}
+          <strong>No models registered yet.</strong><br>
+          Register one, upload a baseline dataset, and monitoring can begin.
+        {% else %}
+          <strong>No models are shared with you.</strong><br>
+          Access is granted per model by an administrator.
+        {% endif %}
+      </p>
+    {% endfor %}
+  </div>
 </div>
 {% endblock %}

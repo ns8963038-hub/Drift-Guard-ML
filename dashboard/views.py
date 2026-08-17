@@ -139,6 +139,7 @@ def dashboard_index(request):
         )
         context["recent_activities"] = LoginActivity.objects.select_related("user")[:8]
 
+    context["nav"] = "dashboard"
     return render(request, "dashboard/index.html", context)
 
 

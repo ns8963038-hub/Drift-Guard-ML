@@ -289,7 +289,11 @@ def test_matrix_anonymous_is_locked_out(client, people):
     ]:
         response = client.get(url, follow=True)
         assert response.status_code == 200, f"{url} redirected somewhere broken"
-        assert b"Sign In" in response.content, f"{url} did not land on the login page"
+        # Assert on the form itself rather than its heading text — a login page
+        # is defined by having somewhere to type a username, not by its wording.
+        assert (
+            b'name="username"' in response.content
+        ), f"{url} did not land on a page with a login form"
         assert response.redirect_chain, f"{url} was served without authentication"
 
 

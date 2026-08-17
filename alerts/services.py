@@ -101,12 +101,31 @@ def create_or_update_alert(
     ).first()
 
     if existing:
+        # Refresh everything that describes the occurrence, not just severity.
+        # Only message and severity were updated before, so a feature that
+        # escalated from moderate to high drift kept its original headline —
+        # the queue then read "Moderate drift detected — X" next to a CRITICAL
+        # badge, and the detail page still linked to the first run rather than
+        # the one that had just fired.
         existing.occurrence_count += 1
         existing.last_seen_at = timezone.now()
         existing.message = message
         existing.severity = severity
+        existing.headline = headline
+        if rule_code:
+            existing.rule_code = rule_code
+        if run_id is not None:
+            existing.run_id = run_id
         existing.save(
-            update_fields=["occurrence_count", "last_seen_at", "message", "severity"]
+            update_fields=[
+                "occurrence_count",
+                "last_seen_at",
+                "message",
+                "severity",
+                "headline",
+                "rule_code",
+                "run_id",
+            ]
         )
         return existing
 

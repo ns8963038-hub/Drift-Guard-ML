@@ -140,5 +140,6 @@ def batch_upload_view(request, slug):
             "baseline": baseline,
             "required_columns": baseline.feature_names if baseline else [],
             "tab": "overview",
+            "nav": "models",
         },
     )

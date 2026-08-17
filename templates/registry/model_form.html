@@ -1,50 +1,83 @@
 {% extends "base.html" %}
 
-{% block header_title %}{% if ml_model %}Edit Model: {{ ml_model.name }}{% else %}Register New Model{% endif %}{% endblock %}
+{% block title %}{% if ml_model %}Edit {{ ml_model.name }}{% else %}Register a model{% endif %} · DriftGuard{% endblock %}
+
+{% block header_title %}{% if ml_model %}Edit {{ ml_model.name }}{% else %}Register a model{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+  <p class="breadcrumb">
+    <a href="{% url 'registry:list' %}">Models</a> /
+    {% if ml_model %}<a href="{% url 'registry:overview' ml_model.slug %}">{{ ml_model.name }}</a> / Edit{% else %}New{% endif %}
+  </p>
+{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">
+    Registering a model creates the record that batches, versions and thresholds
+    attach to. Nothing is monitored until a baseline dataset is uploaded.
+  </p>
+{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 600px; margin: 0 auto;">
-    <h3>{% if ml_model %}Edit Model: {{ ml_model.name }}{% else %}Register New Model{% endif %}</h3>
+{% comment %}
+Every control here was previously given class="btn btn-secondary" — text
+   inputs, the textarea and the select were all styled as buttons, which is
+   why they were 32px tall with centred text and no visible edit affordance.
+{% endcomment %}
+<div class="panel form-narrow">
+  <div class="panel-body">
+    <form method="post" class="form-grid">
+      {% csrf_token %}
 
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-critical" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
-            {% endfor %}
-        </div>
-    {% endif %}
+      <label class="field">
+        <span class="field-label">Model name</span>
+        <input type="text" name="name" value="{{ values.name }}"
+               placeholder="Customer Churn Model" required autofocus>
+        <span class="field-hint">The URL is derived from this name and must be unique.</span>
+      </label>
 
-    <form method="post" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-        {% csrf_token %}
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Model Name</label>
-            <input type="text" name="name" value="{{ ml_model.name|default:'' }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Description</label>
-            <textarea name="description" class="btn btn-secondary" style="width: 100%; text-align: left; height: 80px;">{{ ml_model.description|default:'' }}</textarea>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Target Column Name</label>
-            <input type="text" name="target_column" value="{{ ml_model.target_column|default:'' }}" class="btn btn-secondary" style="width: 100%; text-align: left;" placeholder="e.g. Churn" required>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Positive Class Label (Optional)</label>
-            <input type="text" name="positive_class" value="{{ ml_model.positive_class|default:'' }}" class="btn btn-secondary" style="width: 100%; text-align: left;" placeholder="e.g. Yes">
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Problem Type</label>
-            <select name="problem_type" class="btn btn-secondary" style="width: 100%; text-align: left;">
-                {% for code, label in problem_types %}
-                    <option value="{{ code }}" {% if ml_model and ml_model.problem_type == code %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
+      <label class="field">
+        <span class="field-label">Description</span>
+        <textarea name="description" placeholder="What this model predicts, and for whom.">{{ values.description }}</textarea>
+      </label>
 
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-            <button type="submit" class="btn btn-primary" style="flex: 1;">Save Model</button>
-            <a href="{% if ml_model %}{% url 'registry:overview' ml_model.slug %}{% else %}{% url 'registry:list' %}{% endif %}" class="btn btn-secondary">Cancel</a>
-        </div>
+      <label class="field">
+        <span class="field-label">Target column</span>
+        <input type="text" name="target_column" value="{{ values.target_column }}"
+               placeholder="Churn" required>
+        <span class="field-hint">
+          The column being predicted. It is excluded from drift analysis and used
+          to compute accuracy whenever a batch arrives with ground truth.
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Positive class label <span class="muted">— optional</span></span>
+        <input type="text" name="positive_class" value="{{ values.positive_class }}"
+               placeholder="Yes">
+        <span class="field-hint">
+          For binary problems, the value that counts as a positive. Precision and
+          recall are meaningless without it.
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Problem type</span>
+        <select name="problem_type">
+          {% for code, label in problem_types %}
+            <option value="{{ code }}" {% if values.problem_type == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if ml_model %}Save changes{% else %}Register model{% endif %}
+        </button>
+        <a href="{% if ml_model %}{% url 'registry:overview' ml_model.slug %}{% else %}{% url 'registry:list' %}{% endif %}"
+           class="btn btn-ghost">Cancel</a>
+      </div>
     </form>
+  </div>
 </div>
 {% endblock %}

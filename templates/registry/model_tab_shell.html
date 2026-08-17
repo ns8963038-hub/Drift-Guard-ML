@@ -1,40 +1,57 @@
 {% extends "base.html" %}
+{% load monitoring_extras %}
 
+{% block title %}{{ ml_model.name }} · DriftGuard{% endblock %}
 {% block header_title %}{{ ml_model.name }}{% endblock %}
 
-{% block content %}
-<div class="card" style="padding: 1.25rem 1.5rem 0 1.5rem; margin-bottom: 1.5rem;">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-            <h2 style="font-size: 1.5rem; font-weight: 700;">{{ ml_model.name }}</h2>
-            <p style="color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.875rem;">
-                Target: <code>{{ ml_model.target_column }}</code> · Type: {{ ml_model.get_problem_type_display }}
-            </p>
-        </div>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="{% url 'registry:edit' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Edit Model</a>
-            <a href="{% url 'registry:train' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Train Model</a>
-            <a href="{% url 'datasets:baseline_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Upload Baseline</a>
-            <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">+ Version</a>
-            <a href="{% url 'datasets:batch_upload' ml_model.slug %}" class="btn btn-primary" style="font-size: 0.875rem;">Upload Batch</a>
-        </div>
-    </div>
+{% block breadcrumb %}
+  <p class="breadcrumb"><a href="{% url 'registry:list' %}">Models</a> / {{ ml_model.name }}</p>
+{% endblock %}
 
-    <!-- Model Detail Navigation Tabs (WORK_SPLIT §5.1) -->
-    <div style="display: flex; gap: 1.5rem; margin-top: 1.5rem; border-bottom: 1px solid var(--border-color);">
-        <a href="{% url 'registry:overview' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'overview' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'overview' %}var(--accent-primary){% else %}transparent{% endif %};">Overview</a>
-        <a href="{% url 'registry:versions' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'versions' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'versions' %}var(--accent-primary){% else %}transparent{% endif %};">Versions</a>
-        <a href="{% url 'dashboard:model_drift' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'drift' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'drift' %}var(--accent-primary){% else %}transparent{% endif %};">Drift</a>
-        <a href="{% url 'dashboard:model_performance' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'performance' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'performance' %}var(--accent-primary){% else %}transparent{% endif %};">Performance</a>
-        <a href="{% url 'dashboard:model_quality' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'quality' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'quality' %}var(--accent-primary){% else %}transparent{% endif %};">Data Quality</a>
-        <a href="{% url 'registry:compare' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'compare' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'compare' %}var(--accent-primary){% else %}transparent{% endif %};">Compare</a>
-        <a href="{% url 'registry:history' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'history' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'history' %}var(--accent-primary){% else %}transparent{% endif %};">History</a>
-        {% if user.role == 'ADMIN' or user.is_superuser %}
-            <a href="{% url 'alerts:thresholds' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'thresholds' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'thresholds' %}var(--accent-primary){% else %}transparent{% endif %};">Thresholds</a>
-            <a href="{% url 'simulator:list' ml_model.slug %}" style="padding-bottom: 0.75rem; text-decoration: none; font-weight: 600; color: {% if tab == 'simulator' %}var(--accent-primary){% else %}var(--text-secondary){% endif %}; border-bottom: 2px solid {% if tab == 'simulator' %}var(--accent-primary){% else %}transparent{% endif %};">Simulator</a>
-        {% endif %}
-    </div>
-</div>
+{% block header_subtitle %}
+  <p class="muted tiny">
+    Target <code>{{ ml_model.target_column }}</code> ·
+    {{ ml_model.get_problem_type_display }}
+    {% if ml_model.positive_class %} · positive class <code>{{ ml_model.positive_class }}</code>{% endif %}
+    {% if not ml_model.is_active %} · <span class="badge badge-muted">– Deactivated</span>{% endif %}
+  </p>
+{% endblock %}
+
+{% comment %}
+Every action below is gated on what this user may actually do. Showing a
+   button that then refuses the click was the reason all three roles looked
+   identical — the permissions were enforced only on the server.
+{% endcomment %}
+{% block header_actions %}
+  {% if can_manage_models %}
+    <a href="{% url 'registry:edit' ml_model.slug %}" class="btn btn-ghost">Edit</a>
+    <a href="{% url 'registry:train' ml_model.slug %}" class="btn btn-secondary">Train model</a>
+    <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-secondary">Upload version</a>
+  {% endif %}
+  <a href="{% url 'datasets:batch_upload' ml_model.slug %}" class="btn btn-primary">Upload batch</a>
+{% endblock %}
+
+{% block content %}
+<nav class="tabs" aria-label="Model sections">
+  <a href="{% url 'registry:overview' ml_model.slug %}" class="tab {% if tab == 'overview' %}is-active{% endif %}">Overview</a>
+  <a href="{% url 'registry:versions' ml_model.slug %}" class="tab {% if tab == 'versions' %}is-active{% endif %}">Versions</a>
+  <a href="{% url 'dashboard:model_drift' ml_model.slug %}" class="tab {% if tab == 'drift' %}is-active{% endif %}">Drift</a>
+  <a href="{% url 'dashboard:model_performance' ml_model.slug %}" class="tab {% if tab == 'performance' %}is-active{% endif %}">Performance</a>
+  <a href="{% url 'dashboard:model_quality' ml_model.slug %}" class="tab {% if tab == 'quality' %}is-active{% endif %}">Data quality</a>
+  <a href="{% url 'registry:compare' ml_model.slug %}" class="tab {% if tab == 'compare' %}is-active{% endif %}">Compare</a>
+  <a href="{% url 'registry:history' ml_model.slug %}" class="tab {% if tab == 'history' %}is-active{% endif %}">History</a>
+
+  {% comment %}
+Configuring thresholds and the data feed are Data Scientist decisions.
+     This previously required ADMIN, so the owner of a model could not see the
+     tabs for their own model.
+{% endcomment %}
+  {% if can_manage_models %}
+    <a href="{% url 'datasets:baseline_upload' ml_model.slug %}" class="tab {% if tab == 'baseline' %}is-active{% endif %}">Baseline</a>
+    <a href="{% url 'alerts:thresholds' ml_model.slug %}" class="tab {% if tab == 'thresholds' %}is-active{% endif %}">Thresholds</a>
+    <a href="{% url 'simulator:list' ml_model.slug %}" class="tab {% if tab == 'simulator' %}is-active{% endif %}">Simulator</a>
+  {% endif %}
+</nav>
 
 {% block tab_content %}{% endblock %}
 {% endblock %}

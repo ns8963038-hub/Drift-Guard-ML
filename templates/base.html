@@ -2,60 +2,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}DriftGuard ML{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/components.css' %}">
-    <link rel="stylesheet" href="{% static 'css/charts.css' %}">
-    <script src="{% static 'js/theme.js' %}"></script>
-    {% block extra_head %}{% endblock %}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}DriftGuard{% endblock %}</title>
+
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+  <link rel="stylesheet" href="{% static 'css/components.css' %}">
+  <link rel="stylesheet" href="{% static 'css/charts.css' %}">
+
+  {# Applied before first paint, so there is no flash of the wrong theme. #}
+  <script src="{% static 'js/theme.js' %}"></script>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <div class="layout-wrapper">
-        <aside class="sidebar">
-            <div style="font-size: 1.25rem; font-weight: 700; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 2rem;">
-                🛡️ DriftGuard
-            </div>
-            <nav style="display: flex; flex-direction: column; gap: 0.5rem;">
-                <a href="{% url 'dashboard:index' %}" class="btn btn-secondary" style="justify-content: flex-start;">📊 Dashboard</a>
-                <a href="{% url 'registry:list' %}" class="btn btn-secondary" style="justify-content: flex-start;">🤖 Models</a>
-                <a href="{% url 'alerts:list' %}" class="btn btn-secondary" style="justify-content: flex-start;">🚨 Alerts</a>
-            </nav>
-            <div style="margin-top: auto;">
-                <button onclick="toggleTheme()" class="btn btn-secondary" style="width: 100%;">🌓 Toggle Theme</button>
-            </div>
-        </aside>
-        <main class="main-content">
-            <header class="header-bar">
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <h2>{% block header_title %}Overview{% endblock %}</h2>
-                </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    {% if user.is_authenticated %}
-                        <span>👤 {{ user.username }} ({{ user.get_role_display }})</span>
-                        <a href="{% url 'accounts:logout' %}" class="btn btn-secondary">Logout</a>
-                    {% else %}
-                        <a href="{% url 'accounts:login' %}" class="btn btn-primary">Login</a>
-                    {% endif %}
-                </div>
-            </header>
-            {% block content %}
-            <div class="card">
-                <h3>Welcome to DriftGuard</h3>
-                <p style="color: var(--text-secondary); margin-top: 0.5rem;">
-                    Multi-user ML model monitoring & data drift detection platform.
-                </p>
-            </div>
-            {% endblock %}
-        </main>
+<div class="layout-wrapper">
+
+  {% comment %}
+── Sidebar ──────────────────────────────────────────────────────
+     Navigation is built from what the signed-in user may actually do.
+     Showing an action that then refuses the click is worse than not
+     showing it, and it is why all three roles previously looked alike.
+{% endcomment %}
+  <aside class="sidebar">
+    <a href="{% url 'dashboard:index' %}" class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-text">DriftGuard</span>
+    </a>
+
+    <div class="who">
+      <span class="who-avatar">{{ user.username|first|upper }}</span>
+      <span class="who-text">
+        <strong>{{ user.username }}</strong>
+        <span class="role-chip role-{{ role_slug }}">{{ role_label }}</span>
+      </span>
     </div>
-    <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
-    <script defer src="{% static 'vendor/alpine/alpine.min.js' %}"></script>
-    <script src="{% static 'js/charts.js' %}"></script>
-    <script src="{% static 'js/tables.js' %}"></script>
-    <script src="{% static 'js/polling.js' %}"></script>
-    {% block extra_js %}{% endblock %}
+
+    <nav class="nav">
+      <span class="nav-heading">Monitoring</span>
+      <a href="{% url 'dashboard:index' %}" class="nav-link {% if nav == 'dashboard' %}is-active{% endif %}">
+        <span class="nav-icon">▤</span> Dashboard
+      </a>
+      <a href="{% url 'registry:list' %}" class="nav-link {% if nav == 'models' %}is-active{% endif %}">
+        <span class="nav-icon">◈</span> Models
+        {% if nav_model_count %}<span class="nav-count">{{ nav_model_count }}</span>{% endif %}
+      </a>
+      <a href="{% url 'alerts:list' %}" class="nav-link {% if nav == 'alerts' %}is-active{% endif %}">
+        <span class="nav-icon">▲</span> Alerts
+        {% if nav_alert_count %}<span class="nav-count is-alert">{{ nav_alert_count }}</span>{% endif %}
+      </a>
+      <a href="{% url 'alerts:recommendations' %}" class="nav-link {% if nav == 'recommendations' %}is-active{% endif %}">
+        <span class="nav-icon">◔</span> Retraining
+      </a>
+
+      {% if can_manage_users %}
+        {% comment %}
+Previously unreachable: the admin screens existed but nothing linked
+           to them, so they could only be opened by typing the URL.
+{% endcomment %}
+        <span class="nav-heading">Administration</span>
+        <a href="{% url 'accounts:user_list' %}" class="nav-link {% if nav == 'users' %}is-active{% endif %}">
+          <span class="nav-icon">◉</span> Users
+        </a>
+        <a href="{% url 'accounts:access_grants' %}" class="nav-link {% if nav == 'access' %}is-active{% endif %}">
+          <span class="nav-icon">⚿</span> Access grants
+        </a>
+        <a href="{% url 'accounts:login_activity' %}" class="nav-link {% if nav == 'activity' %}is-active{% endif %}">
+          <span class="nav-icon">◷</span> Login activity
+        </a>
+      {% endif %}
+
+      <span class="nav-heading">Account</span>
+      <a href="{% url 'accounts:profile' %}" class="nav-link {% if nav == 'profile' %}is-active{% endif %}">
+        <span class="nav-icon">⊙</span> Profile
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button onclick="toggleTheme()" class="btn btn-ghost btn-block" type="button">
+        <span aria-hidden="true">◐</span> <span id="themeLabel">Theme</span>
+      </button>
+      <a href="{% url 'accounts:logout' %}" class="btn btn-ghost btn-block">Sign out</a>
+    </div>
+  </aside>
+
+  {# ── Content ──────────────────────────────────────────────────── #}
+  <main class="main-content">
+    <header class="header-bar">
+      <div class="header-titles">
+        {% block breadcrumb %}{% endblock %}
+        <h1>{% block header_title %}Dashboard{% endblock %}</h1>
+        {% block header_subtitle %}{% endblock %}
+      </div>
+      <div class="header-actions">{% block header_actions %}{% endblock %}</div>
+    </header>
+
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <div class="toast toast-{{ message.tags|default:'info' }}" role="status">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script defer src="{% static 'vendor/alpine/alpine.min.js' %}"></script>
+<script src="{% static 'js/charts.js' %}"></script>
+<script src="{% static 'js/tables.js' %}"></script>
+<script src="{% static 'js/polling.js' %}"></script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

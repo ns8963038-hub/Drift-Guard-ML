@@ -1,32 +1,137 @@
-{% extends "base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · DriftGuard</title>
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+  <link rel="stylesheet" href="{% static 'css/components.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+{% comment %}
+Deliberately does NOT extend base.html. The sign-in page previously rendered
+   the full application shell — sidebar, navigation and a "Login" button in the
+   header — while nobody was signed in.
+{% endcomment %}
+<body class="auth-body">
 
-{% block header_title %}Login{% endblock %}
+<div class="auth-split">
 
-{% block content %}
-<div class="card" style="max-width: 420px; margin: 2rem auto;">
-    <h3>Sign In to DriftGuard</h3>
-    
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-critical" style="display: block; text-align: center; width: 100%; margin-bottom: 0.5rem; padding: 0.5rem;">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        </div>
-    {% endif %}
+  {# ── Left: what this thing is ──────────────────────────────────── #}
+  <section class="auth-pitch">
+    <a href="/" class="brand brand-lg">
+      <span class="brand-mark">◆</span>
+      <span class="brand-text">DriftGuard</span>
+    </a>
 
-    <form method="post" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+    <h1>Your model was right last month.<br>Is it still right today?</h1>
+
+    <p class="auth-lede">
+      Models are trained once on a snapshot and then deployed into a world that
+      keeps moving. They do not notice. They keep returning confident
+      predictions while quietly becoming wrong.
+    </p>
+
+    <ul class="auth-points">
+      <li><span class="auth-dot dot-1"></span><span><strong>Data quality</strong> — missing values, duplicates, outliers, unseen categories</span></li>
+      <li><span class="auth-dot dot-2"></span><span><strong>Drift detection</strong> — K-S, Chi-Square, PSI and Jensen-Shannon, per feature</span></li>
+      <li><span class="auth-dot dot-3"></span><span><strong>Performance</strong> — accuracy, precision, recall and F1 over time</span></li>
+      <li><span class="auth-dot dot-4"></span><span><strong>Health score</strong> — one number, with the reasoning shown</span></li>
+    </ul>
+
+    <p class="auth-foot">
+      Alerts when thresholds break. Plain-English explanations of what changed.
+      Retraining recommended, never performed.
+    </p>
+  </section>
+
+  {# ── Right: the form ───────────────────────────────────────────── #}
+  <section class="auth-panel">
+    <div class="auth-card">
+      <h2>Sign in</h2>
+      <p class="muted tiny">Use the account for the role you want to explore.</p>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="auth-error" role="alert">
+            <span aria-hidden="true">✕</span> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" class="auth-form">
         {% csrf_token %}
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Username</label>
-            <input type="text" name="username" class="btn btn-secondary" style="width: 100%; text-align: left;" required autofocus>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Password</label>
-            <input type="password" name="password" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-        </div>
-        <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem;">Sign In</button>
-    </form>
+        <label class="field">
+          <span class="field-label">Username</span>
+          <input type="text" name="username" id="id_username" required autofocus autocomplete="username">
+        </label>
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input type="password" name="password" id="id_password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Sign in</button>
+      </form>
+
+      {% comment %}
+Three accounts, not a role picker.
+
+         A dropdown that let you choose your role at sign-in would let anyone
+         claim any privilege — the role belongs to the account, and the server
+         decides. These fill the form so every role can be tried quickly, while
+         authentication still does the deciding.
+{% endcomment %}
+      <div class="demo-accounts">
+        <span class="demo-heading">Demo accounts — click to fill</span>
+
+        <button type="button" class="demo-account" onclick="fillLogin('admin')">
+          <span class="demo-avatar role-admin">A</span>
+          <span class="demo-text">
+            <strong>admin</strong>
+            <span class="role-chip role-admin">Administrator</span>
+            <span class="demo-note">Manages users, access grants and the audit trail</span>
+          </span>
+        </button>
+
+        <button type="button" class="demo-account" onclick="fillLogin('dsci')">
+          <span class="demo-avatar role-data_scientist">D</span>
+          <span class="demo-text">
+            <strong>dsci</strong>
+            <span class="role-chip role-data_scientist">Data Scientist</span>
+            <span class="demo-note">Owns the models — trains, versions, tunes thresholds</span>
+          </span>
+        </button>
+
+        <button type="button" class="demo-account" onclick="fillLogin('mleng')">
+          <span class="demo-avatar role-analyst">S</span>
+          <span class="demo-text">
+            <strong>mleng</strong>
+            <span class="role-chip role-analyst">Analyst</span>
+            <span class="demo-note">Feeds in production data and works the alert queue</span>
+          </span>
+        </button>
+
+        <p class="muted tiny demo-hint">
+          All three use the password <code>driftguard123</code>. The Analyst is
+          granted one model and denied the other, so access control is something
+          you can see rather than take on trust.
+        </p>
+      </div>
+    </div>
+
+    <button onclick="toggleTheme()" class="btn btn-ghost auth-theme" type="button">
+      <span aria-hidden="true">◐</span> <span id="themeLabel">Theme</span>
+    </button>
+  </section>
 </div>
-{% endblock %}
+
+<script>
+  function fillLogin(username) {
+    document.getElementById("id_username").value = username;
+    document.getElementById("id_password").value = "driftguard123";
+    document.getElementById("id_password").focus();
+  }
+</script>
+</body>
+</html>
