@@ -63,9 +63,28 @@ def test_label(value):
 
 @register.filter
 def pct(value, places=1):
+    """Format a value **already expressed in percent**: 0.12 -> "0.12%".
+
+    Quality rates are stored this way (``missing_pct`` of 0.12 means 0.12%).
+    For a 0–1 ratio such as accuracy, use ``ratio`` instead — passing 0.70 here
+    renders "0.7%" for a model that is 70% accurate.
+    """
     if value is None:
         return "—"
     return f"{value:.{places}f}%"
+
+
+@register.filter
+def ratio(value, places=1):
+    """Format a **0–1 ratio** as a percentage: 0.70 -> "70.0%".
+
+    Accuracy, precision, recall, F1 and prediction shares are all stored as
+    fractions. Kept separate from ``pct`` because the two differ by a factor of
+    100 and nothing about the value itself says which one it is.
+    """
+    if value is None:
+        return "—"
+    return f"{value * 100:.{places}f}%"
 
 
 @register.filter

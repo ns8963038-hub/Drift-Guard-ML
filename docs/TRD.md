@@ -516,7 +516,7 @@ python manage.py migrate
 python scripts/prepare_datasets.py
 python scripts/train_demo_models.py
 python scripts/seed_demo.py
-python manage.py runserver --noreload      # --noreload: one scheduler only
+DJANGO_DEBUG=0 python manage.py runserver --noreload   # one scheduler, real error pages
 ```
 
 `--noreload` is required, not cosmetic: the autoreloader spawns a second process and a second

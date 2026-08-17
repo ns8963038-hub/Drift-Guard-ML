@@ -103,6 +103,27 @@ def user_list_view(request):
     )
 
 
+def _user_form_context(target_user, values=None):
+    """Context for the user form, from one place.
+
+    The error path used to re-render with ``target_user`` — which is None while
+    creating — so a rejected submission came back blank.
+    """
+    if values is None:
+        values = {
+            "username": target_user.username if target_user else "",
+            "email": target_user.email if target_user else "",
+            "role": target_user.role if target_user else Role.ANALYST,
+            "is_active": target_user.is_active if target_user else True,
+        }
+    return {
+        "target_user": target_user,
+        "roles": Role.choices,
+        "values": values,
+        "nav": "users",
+    }
+
+
 @login_required
 def user_create_edit_view(request, user_id=None):
     if request.user.role != Role.ADMIN and not request.user.is_superuser:
@@ -117,14 +138,53 @@ def user_create_edit_view(request, user_id=None):
         is_active = request.POST.get("is_active") == "on"
         password = request.POST.get("password", "")
 
+        def reject(message):
+            messages.error(request, message)
+            return render(
+                request,
+                "accounts/admin_user_form.html",
+                _user_form_context(
+                    target_user,
+                    {
+                        "username": username,
+                        "email": email,
+                        "role": role,
+                        "is_active": is_active,
+                    },
+                ),
+            )
+
+        if not username:
+            # create_user() raises ValueError on a blank username, which would
+            # surface as a 500 rather than as a message on the form.
+            return reject("A username is required.")
+        if role not in Role.values:
+            return reject("That is not a valid role.")
+
+        # The uniqueness check existed only on the create path. Renaming an
+        # existing user onto a taken name reached save() and raised
+        # IntegrityError — a 500 on an ordinary typo.
+        clash = User.objects.filter(username=username)
+        if target_user:
+            clash = clash.exclude(pk=target_user.pk)
+        if clash.exists():
+            return reject(f"The username '{username}' is already taken.")
+
+        # An administrator editing their own account could remove their own
+        # admin role or deactivate themselves, locking everyone out of user
+        # management with no way back in through the interface.
+        editing_self = target_user is not None and target_user.pk == request.user.pk
+        if editing_self and role != Role.ADMIN:
+            return reject(
+                "You cannot remove your own Administrator role. "
+                "Ask another administrator to change it."
+            )
+        if editing_self and not is_active:
+            return reject("You cannot deactivate your own account.")
+
         if not target_user:
-            if User.objects.filter(username=username).exists():
-                messages.error(request, "Username already exists.")
-                return render(
-                    request,
-                    "accounts/admin_user_form.html",
-                    {"target_user": target_user, "roles": Role.choices, "nav": "users"},
-                )
+            if not password:
+                return reject("A password is required for a new user.")
             target_user = User.objects.create_user(
                 username=username,
                 email=email,
@@ -132,7 +192,7 @@ def user_create_edit_view(request, user_id=None):
                 role=role,
                 is_active=is_active,
             )
-            messages.success(request, f"User '{username}' created successfully.")
+            messages.success(request, f"User '{username}' created.")
         else:
             target_user.username = username
             target_user.email = email
@@ -141,14 +201,12 @@ def user_create_edit_view(request, user_id=None):
             if password:
                 target_user.set_password(password)
             target_user.save()
-            messages.success(request, f"User '{username}' updated successfully.")
+            messages.success(request, f"User '{username}' updated.")
 
         return redirect("accounts:user_list")
 
     return render(
-        request,
-        "accounts/admin_user_form.html",
-        {"target_user": target_user, "roles": Role.choices, "nav": "users"},
+        request, "accounts/admin_user_form.html", _user_form_context(target_user)
     )
 
 

@@ -1,58 +1,151 @@
 {% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
+
+{% comment %}
+This tab invented every number it displayed — "0.12%", "0.00%", "1.45%" and
+   three PASSED badges, hardcoded, regardless of the batch. The real report was
+   already in the context under `quality`, and it carries the thresholds each
+   check was actually judged against.
+{% endcomment %}
 
 {% block tab_content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>Incoming Data Quality</h3>
-    </div>
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-        <div class="card" style="margin-bottom: 0;">
-            <div style="color: var(--text-secondary); font-size: 0.85rem;">Missing Values Rate</div>
-            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-healthy); margin-top: 0.25rem;">0.12%</div>
-        </div>
-        <div class="card" style="margin-bottom: 0;">
-            <div style="color: var(--text-secondary); font-size: 0.85rem;">Duplicate Rows Rate</div>
-            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-healthy); margin-top: 0.25rem;">0.00%</div>
-        </div>
-        <div class="card" style="margin-bottom: 0;">
-            <div style="color: var(--text-secondary); font-size: 0.85rem;">Outlier Rows Rate</div>
-            <div style="font-size: 1.5rem; font-weight: 700; color: var(--color-warning); margin-top: 0.25rem;">1.45%</div>
-        </div>
+{% if not run or not quality %}
+  <div class="panel">
+    <div class="panel-body">
+      <p class="empty-state">
+        <strong>No data quality report yet.</strong><br>
+        Quality is assessed on each incoming batch — missing values, duplicates,
+        outliers, type mismatches and categories never seen in the baseline.
+      </p>
     </div>
+  </div>
+{% else %}
 
-    <div class="card" style="margin-bottom: 0;">
-        <h4>Quality Checks Summary</h4>
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 1rem;">
-            <thead>
-                <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
-                    <th style="padding: 0.75rem;">Check Name</th>
-                    <th style="padding: 0.75rem;">Measured Value</th>
-                    <th style="padding: 0.75rem;">Threshold</th>
-                    <th style="padding: 0.75rem;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 0.75rem;">Missing Value Rate</td>
-                    <td style="padding: 0.75rem;">0.12%</td>
-                    <td style="padding: 0.75rem;">5.00%</td>
-                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
-                </tr>
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 0.75rem;">Duplicate Row Rate</td>
-                    <td style="padding: 0.75rem;">0.00%</td>
-                    <td style="padding: 0.75rem;">1.00%</td>
-                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
-                </tr>
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 0.75rem;">Outlier Rate</td>
-                    <td style="padding: 0.75rem;">1.45%</td>
-                    <td style="padding: 0.75rem;">5.00%</td>
-                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">PASSED</span></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+<div class="tab-toolbar">
+  <div class="run-context">
+    <span>Latest run <a href="{% url 'monitoring:run_detail' run.pk %}">#{{ run.pk }}</a></span>
+    <span class="muted">·</span>
+    <span class="muted">{{ run.created_at|date:"d M Y H:i" }}</span>
+    <span class="muted">·</span>
+    <span class="muted">{{ quality.row_count }} rows, {{ quality.columns_checked }} columns</span>
+  </div>
 </div>
+
+<div class="stat-grid">
+  <div class="stat-card {% if quality.quality_score >= 80 %}is-good{% elif quality.quality_score >= 60 %}is-warning{% else %}is-critical{% endif %}">
+    <span class="stat-head">Quality score</span>
+    <span class="stat-num">{{ quality.quality_score }}<span class="stat-unit">/100</span></span>
+    <span class="stat-foot">100 minus the penalties below</span>
+  </div>
+  <div class="stat-card {% if quality.missing_pct > 0 %}is-warning{% else %}is-good{% endif %}">
+    <span class="stat-head">Missing values</span>
+    <span class="stat-num">{{ quality.missing_pct|floatformat:2 }}%</span>
+    <span class="stat-foot">{{ quality.missing_total }} cell{{ quality.missing_total|pluralize }}</span>
+  </div>
+  <div class="stat-card {% if quality.duplicate_pct > 0 %}is-warning{% else %}is-good{% endif %}">
+    <span class="stat-head">Duplicate rows</span>
+    <span class="stat-num">{{ quality.duplicate_pct|floatformat:2 }}%</span>
+    <span class="stat-foot">{{ quality.duplicate_rows }} row{{ quality.duplicate_rows|pluralize }}</span>
+  </div>
+  <div class="stat-card {% if quality.outlier_pct > 0 %}is-warning{% else %}is-good{% endif %}">
+    <span class="stat-head">Outliers</span>
+    <span class="stat-num">{{ quality.outlier_pct|floatformat:2 }}%</span>
+    <span class="stat-foot">beyond the baseline range</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>Checks on this batch</h3>
+    <span class="muted tiny">Judged against the thresholds saved with the run</span>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Check</th>
+          <th class="num">Measured</th>
+          <th class="num">Threshold</th>
+          <th class="num">Penalty</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for check in checks %}
+          <tr>
+            <td>
+              {{ check.label }}
+              <p class="muted tiny">{{ check.detail }}</p>
+            </td>
+            <td class="num">{{ check.measured }}</td>
+            <td class="num">{{ check.threshold }}</td>
+            <td class="num">{% if check.penalty %}−{{ check.penalty|floatformat:1 }}{% else %}—{% endif %}</td>
+            <td>
+              {% if check.passed %}
+                <span class="badge badge-good">✓ Passed</span>
+              {% else %}
+                <span class="badge badge-warning">▲ Over threshold</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="panel-body">
+    <p class="muted tiny">
+      Thresholds come from <code>thresholds_snapshot</code> on this run, not from
+      today's settings. Changing a threshold later must not silently rewrite what
+      a past run reported.
+    </p>
+  </div>
+</div>
+
+{% if problem_columns %}
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Columns needing attention</h3>
+      <span class="muted tiny">{{ problem_columns|length }} of {{ quality.columns_checked }}</span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th>Type</th>
+            <th class="num">Missing</th>
+            <th>Issue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for column in problem_columns %}
+            <tr>
+              <td>{{ column.name }}</td>
+              <td class="muted">{{ column.type|title }}</td>
+              <td class="num">{{ column.missing_pct|floatformat:2 }}%</td>
+              <td>
+                {% for issue in column.issues %}
+                  <span class="badge badge-warning">{{ issue }}</span>
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="panel">
+    <div class="panel-body">
+      <p class="empty-state">
+        <strong>Every column passed.</strong><br>
+        No missing values, type mismatches, out-of-range values or unseen
+        categories across {{ quality.columns_checked }} columns.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% endif %}
 {% endblock %}

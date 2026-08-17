@@ -44,3 +44,13 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Two workers means two schedulers and every simulated batch delivered twice.
 # Run with: gunicorn --workers 1 config.wsgi
 SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "True") == "True"
+
+# ── Static files ──────────────────────────────────────────────────────
+# Hashed filenames so a cached stylesheet cannot outlive a deployment.
+# Requires: python manage.py collectstatic
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}

@@ -29,7 +29,11 @@
 .btn-secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
 .btn-ghost { background: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
-.btn-danger { background: var(--status-critical); color: #fff; }
+.btn-danger {
+  background: transparent; color: var(--status-critical-text);
+  border-color: rgba(208,59,59,.4);
+}
+.btn-danger:hover { background: var(--status-critical); color: #fff; border-color: transparent; }
 .btn-block { width: 100%; }
 .btn-lg { height: 40px; font-size: 0.875rem; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -306,3 +310,74 @@ input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visibl
 }
 .filter-bar select:hover { border-color: var(--border-strong); }
 .data-table .empty-state { border: none; background: none; margin: 0; }
+
+/* ── Model tab toolbar and range selector ───────────────────────── */
+.tab-toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+}
+.run-context { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; font-size: 0.8125rem; }
+
+/* Links, not buttons: the range belongs in the URL so it survives a reload
+   and can be shared. They were <button>s with no handler at all. */
+.range-selector {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.range-option {
+  padding: 0.25rem 0.65rem; border-radius: calc(var(--r-sm) - 1px);
+  font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);
+}
+.range-option:hover { background: var(--bg-hover); color: var(--text-primary); }
+.range-option.is-active { background: var(--bg-surface); color: var(--brand); box-shadow: var(--shadow-sm); }
+
+/* ── Confusion matrix ──────────────────────────────────────────── */
+.data-table.confusion tbody th {
+  font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary);
+  background: var(--bg-subtle); text-align: left;
+}
+.data-table.confusion td.is-correct {
+  background: var(--color-healthy-bg); color: var(--status-good-text); font-weight: 650;
+}
+
+/* Panels stack down a tab, so they need the rhythm .card used to provide. */
+.panel + .panel, .stat-grid + .panel, .alert-banner + .panel { margin-top: 1.25rem; }
+.panel .chart-container { margin: 0 0 0.5rem; }
+.table-view summary { padding: 0.35rem 0; }
+
+/* ── Odds and ends used by the rebuilt screens ─────────────────── */
+.btn-sm { height: 26px; padding: 0 0.55rem; font-size: 0.75rem; }
+.field-error { font-size: 0.75rem; color: var(--status-critical-text); }
+.field.checkbox { flex-direction: row; align-items: flex-start; gap: 0.55rem; }
+.field.checkbox input { width: auto; margin-top: 0.15rem; flex: 0 0 auto; }
+.field.checkbox span { font-size: 0.8125rem; color: var(--text-secondary); }
+
+.truncate { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.grant-form {
+  display: grid; gap: 0.85rem; align-items: end; margin-bottom: 0.85rem;
+  grid-template-columns: 1fr 1fr 1fr auto;
+}
+@media (max-width: 900px) { .grant-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .grant-form { grid-template-columns: 1fr; } }
+
+.timeline-entry {
+  display: flex; flex-direction: column; gap: 0.1rem;
+  padding-left: 0.85rem; border-left: 2px solid var(--brand-subtle);
+}
+.timeline-entry strong { font-size: 0.8125rem; }
+
+.status-code {
+  font-size: 2.5rem; font-weight: 700; line-height: 1;
+  color: var(--text-muted); letter-spacing: -0.03em; margin-bottom: 0.5rem;
+}
+
+/* ── Alert detail and retraining recommendations ───────────────── */
+.alert-message { white-space: pre-wrap; font-size: 0.9375rem; line-height: 1.65; }
+.rec-card { border-left: 3px solid var(--border-strong); }
+.rec-card.rec-urgent  { border-left-color: var(--status-critical); }
+.rec-card.rec-advised { border-left-color: var(--status-warning); }
+.rec-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.trigger-list { margin: 0.5rem 0 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem; }
+.header-actions form { margin: 0; }
+.check-list { margin: 0.5rem 0 0 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8125rem; color: var(--text-secondary); }

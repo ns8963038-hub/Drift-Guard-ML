@@ -1,68 +1,167 @@
 {% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
+
+{% comment %}
+This tab was a mockup: a "[Chart.js: ... endpoint loaded]" placeholder and a
+   table of four hardcoded numbers. The chart endpoint and the per-feature
+   results were both real and already in the context — nothing read them.
+{% endcomment %}
 
 {% block tab_content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>Feature & Distribution Drift</h3>
-        <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">24h</button>
-            <button class="btn btn-primary" style="font-size: 0.8rem;">7d</button>
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">30d</button>
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">All</button>
-        </div>
-    </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-        <div class="card" style="margin-bottom: 0;">
-            <h4>Drift Metrics Over Time (KS, Chi2, PSI)</h4>
-            <div class="chart-container" style="display: flex; justify-content: center; align-items: center; background: var(--bg-primary); border-radius: 0.5rem; margin-top: 1rem;">
-                <p style="color: var(--text-secondary); font-size: 0.875rem;">📈 [Chart.js: Drift Metrics API endpoint loaded]</p>
-            </div>
-            <div class="table-disclosure">
-                <details>
-                    <summary style="cursor: pointer; color: var(--accent-primary);">View as table</summary>
-                    <table style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.8rem;">
-                        <thead>
-                            <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
-                                <th>Timestamp</th>
-                                <th>KS p-val</th>
-                                <th>Chi2 p-val</th>
-                                <th>PSI</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td>2026-08-17 12:00</td><td>0.045</td><td>0.032</td><td>0.082</td></tr>
-                            <tr><td>2026-08-17 06:00</td><td>0.048</td><td>0.035</td><td>0.075</td></tr>
-                        </tbody>
-                    </table>
-                </details>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom: 0;">
-            <h4>Prediction Distribution Comparison</h4>
-            <div class="chart-container" style="display: flex; justify-content: center; align-items: center; background: var(--bg-primary); border-radius: 0.5rem; margin-top: 1rem;">
-                <p style="color: var(--text-secondary); font-size: 0.875rem;">📊 [Chart.js: Baseline vs Production distribution endpoint loaded]</p>
-            </div>
-            <div class="table-disclosure">
-                <details>
-                    <summary style="cursor: pointer; color: var(--accent-primary);">View as table</summary>
-                    <table style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.8rem;">
-                        <thead>
-                            <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
-                                <th>Class</th>
-                                <th>Baseline</th>
-                                <th>Production</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td>No (0)</td><td>73.0%</td><td>65.0%</td></tr>
-                            <tr><td>Yes (1)</td><td>27.0%</td><td>35.0%</td></tr>
-                        </tbody>
-                    </table>
-                </details>
-            </div>
-        </div>
+{% if not run %}
+  <div class="panel">
+    <div class="panel-body">
+      <p class="empty-state">
+        <strong>No completed monitoring run yet.</strong><br>
+        Drift is measured by comparing a production batch against the baseline.
+        {% if can_manage_models %}
+          Upload a baseline, then a batch — or start the simulator.
+        {% else %}
+          Upload a production batch to produce the first run.
+        {% endif %}
+      </p>
     </div>
+  </div>
+{% else %}
+
+<div class="tab-toolbar">
+  <div class="run-context">
+    <span>Latest run <a href="{% url 'monitoring:run_detail' run.pk %}">#{{ run.pk }}</a></span>
+    <span class="muted">·</span>
+    <span class="muted">{{ run.created_at|date:"d M Y H:i" }}</span>
+    <span class="muted">·</span>
+    {% status_badge run.overall_drift_status %}
+  </div>
+  {% include "dashboard/_range_selector.html" %}
 </div>
+
+<div class="stat-grid">
+  <div class="stat-card {% if run.features_high %}is-critical{% else %}is-good{% endif %}">
+    <span class="stat-head">High drift</span>
+    <span class="stat-num">{{ run.features_high }}</span>
+    <span class="stat-foot">of {{ run.features_total }} features</span>
+  </div>
+  <div class="stat-card {% if run.features_moderate %}is-warning{% else %}is-good{% endif %}">
+    <span class="stat-head">Moderate drift</span>
+    <span class="stat-num">{{ run.features_moderate }}</span>
+    <span class="stat-foot">worth watching</span>
+  </div>
+  <div class="stat-card is-good">
+    <span class="stat-head">Stable</span>
+    <span class="stat-num">{{ run.features_clean }}</span>
+    <span class="stat-foot">no meaningful change</span>
+  </div>
+  {% if run.features_insufficient %}
+    <div class="stat-card">
+      <span class="stat-head">Not enough data</span>
+      <span class="stat-num">{{ run.features_insufficient }}</span>
+      <span class="stat-foot">too few rows to judge</span>
+    </div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>Drift over time</h3>
+    <span class="muted tiny">Features by status per run, and the worst PSI seen</span>
+  </div>
+  <div class="panel-body">
+    <div class="chart-container"><canvas id="driftChart"></canvas></div>
+    <details class="table-view">
+      <summary>View as table</summary>
+      <div id="driftTable"></div>
+    </details>
+    <p class="muted tiny">
+      Counts and PSI are plotted separately rather than on two y-axes — a
+      dual-axis chart is the most commonly misread form there is.
+    </p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>Every feature in this run</h3>
+    <span class="muted tiny">Worst first</span>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Type</th>
+          <th>Test</th>
+          <th class="num">p-value</th>
+          <th class="num">PSI</th>
+          <th class="num">JSD</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for result in results %}
+          <tr>
+            <td>
+              <a href="{% url 'monitoring:feature_detail' run.pk result.feature_name %}">{{ result.feature_name }}</a>
+              {% if result.unseen_categories %}
+                <span class="badge badge-warning" title="Categories absent from the baseline">
+                  +{{ result.unseen_categories|length }} unseen
+                </span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ result.feature_type|title }}</td>
+            <td class="muted">{{ result.test_name|test_label }}</td>
+            <td class="num">{{ result.p_value|pvalue }}</td>
+            <td class="num">{{ result.psi|floatformat:3|default:"—" }}</td>
+            <td class="num">{{ result.jsd|floatformat:3|default:"—" }}</td>
+            <td>{% status_badge result.status %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><p class="empty-state">This run produced no feature results.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel explanation">
+  <div class="panel-body">
+    <h4 style="margin-top:0">How a feature gets its status</h4>
+    <p class="muted tiny">
+      Magnitude decides the band — the worse of PSI and Jensen-Shannon. The
+      statistical test (K-S for numeric, Chi-Square for categorical) only
+      <em>confirms</em> it. A large magnitude the test cannot confirm is
+      downgraded one level, because on a big batch a trivial shift will look
+      significant, and on a small one a real shift will not.
+    </p>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if run %}
+<script>
+(function () {
+  var url = "{% url 'dashboard:chart_drift' ml_model.slug %}" + window.location.search;
+  fetch(url)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      DriftGuardCharts.createDriftStackChart("driftChart", data.labels, data.counts);
+      var rows = data.labels.map(function (label, i) {
+        return [
+          label,
+          data.counts.high[i],
+          data.counts.moderate[i],
+          data.counts.none[i],
+          data.max_psi[i] === null ? "—" : data.max_psi[i]
+        ];
+      });
+      DriftGuardCharts.buildTableView(
+        "driftTable", ["Run", "High", "Moderate", "Stable", "Worst PSI"], rows
+      );
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

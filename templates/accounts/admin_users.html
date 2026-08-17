@@ -1,51 +1,64 @@
 {% extends "base.html" %}
 
-{% block header_title %}User Management (Admin){% endblock %}
+{% block title %}Users · DriftGuard{% endblock %}
+{% block header_title %}Users{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">
+    A user's role decides what the server will accept from them, not merely what
+    the screen shows. Deactivating an account blocks sign-in without deleting
+    anything it owns.
+  </p>
+{% endblock %}
+
+{% block header_actions %}
+  <a href="{% url 'accounts:user_create' %}" class="btn btn-primary">+ Create user</a>
+{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>System Users</h3>
-        <a href="{% url 'accounts:user_create' %}" class="btn btn-primary">+ Create User</a>
-    </div>
-
-    {% if messages %}
-        <div style="margin-bottom: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
-            {% endfor %}
-        </div>
-    {% endif %}
-
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-        <thead>
-            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
-                <th style="padding: 0.75rem;">Username</th>
-                <th style="padding: 0.75rem;">Email</th>
-                <th style="padding: 0.75rem;">Role</th>
-                <th style="padding: 0.75rem;">Status</th>
-                <th style="padding: 0.75rem;">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for u in users %}
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 0.75rem; font-weight: 600;">{{ u.username }}</td>
-                    <td style="padding: 0.75rem; color: var(--text-secondary);">{{ u.email|default:"—" }}</td>
-                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">{{ u.get_role_display }}</span></td>
-                    <td style="padding: 0.75rem;">
-                        {% if u.is_active %}
-                            <span class="badge badge-healthy">Active</span>
-                        {% else %}
-                            <span class="badge badge-critical">Disabled</span>
-                        {% endif %}
-                    </td>
-                    <td style="padding: 0.75rem;">
-                        <a href="{% url 'accounts:user_edit' u.id %}" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Edit</a>
-                    </td>
-                </tr>
-            {% endfor %}
-        </tbody>
+<div class="panel">
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Account</th>
+          <th>Last sign-in</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td>
+              <strong>{{ u.username }}</strong>
+              {% if u == request.user %}<span class="muted tiny">— you</span>{% endif %}
+            </td>
+            <td class="muted">{{ u.email|default:"—" }}</td>
+            <td>
+              {% comment %}
+Every role was badged green, so all three looked alike on the one
+                 screen whose entire job is telling them apart.
+{% endcomment %}
+              <span class="role-chip role-{{ u.role|lower }}">{{ u.get_role_display }}</span>
+            </td>
+            <td>
+              {% if u.is_active %}
+                <span class="badge badge-good">✓ Active</span>
+              {% else %}
+                <span class="badge badge-critical">✕ Disabled</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ u.last_login|date:"d M Y H:i"|default:"never" }}</td>
+            <td><a href="{% url 'accounts:user_edit' u.id %}" class="btn btn-secondary btn-sm">Edit</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><p class="empty-state">No users yet.</p></td></tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

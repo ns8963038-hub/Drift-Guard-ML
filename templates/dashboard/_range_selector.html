@@ -1,0 +1,13 @@
+{% comment %}
+The four range buttons were plain <button> elements with no handler — they
+looked interactive and did nothing. They are links now, so the range lands in
+the query string, the chart endpoints read it, and the choice survives a reload
+and can be shared as a URL.
+{% endcomment %}
+<nav class="range-selector" aria-label="Time range">
+  {% for code, label in ranges %}
+    <a href="?range={{ code }}"
+       class="range-option {% if current_range == code %}is-active{% endif %}"
+       {% if current_range == code %}aria-current="true"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>

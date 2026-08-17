@@ -1,64 +1,121 @@
 {% extends "base.html" %}
+{% load monitoring_extras %}
 
-{% block header_title %}Alert Detail #{{ alert.id }}{% endblock %}
+{% block title %}Alert #{{ alert.id }} · DriftGuard{% endblock %}
+{% block header_title %}{{ alert.headline }}{% endblock %}
+
+{% block breadcrumb %}
+  <p class="breadcrumb"><a href="{% url 'alerts:list' %}">Alerts</a> / #{{ alert.id }}</p>
+{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">
+    {{ alert.ml_model.name }} · {{ alert.get_category_display }}
+    {% if alert.feature_name %} · <code>{{ alert.feature_name }}</code>{% endif %}
+  </p>
+{% endblock %}
+
+{% block header_actions %}
+  {% if alert.status == 'NEW' %}
+    <form method="post" action="{% url 'alerts:acknowledge' alert.id %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary">Acknowledge</button>
+    </form>
+  {% endif %}
+  {% if alert.status != 'RESOLVED' %}
+    <form method="post" action="{% url 'alerts:resolve' alert.id %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">Resolve</button>
+    </form>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 700px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <div>
-            <span class="badge {% if alert.severity == 'CRITICAL' %}badge-critical{% elif alert.severity == 'WARNING' %}badge-warning{% else %}badge-healthy{% endif %}">
-                {{ alert.severity }}
-            </span>
-            <h2 style="margin-top: 0.5rem; font-size: 1.5rem;">{{ alert.headline }}</h2>
-            <p style="color: var(--text-secondary); margin-top: 0.25rem;">Model: <strong>{{ alert.ml_model.name }}</strong></p>
-        </div>
-        <div>
-            <span class="badge badge-secondary" style="font-size: 0.9rem;">Status: {{ alert.get_status_display }}</span>
-        </div>
-    </div>
+<div class="dash-cols">
+  <div class="dash-stack">
+    <section class="panel explanation">
+      <div class="panel-head"><h3>What happened</h3></div>
+      <div class="panel-body">
+        <p class="alert-message">{{ alert.message }}</p>
+      </div>
+    </section>
 
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-healthy" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
-            {% endfor %}
+    {% comment %}
+The alert named a feature and a run but linked to neither, so the
+       evidence behind it could only be found by hunting for it.
+{% endcomment %}
+    {% if alert.run or alert.feature_name %}
+      <section class="panel">
+        <div class="panel-head"><h3>The evidence</h3></div>
+        <div class="panel-body">
+          <p class="muted tiny">Everything this alert was raised from.</p>
+          <div class="form-actions">
+            {% if alert.run %}
+              <a href="{% url 'monitoring:run_detail' alert.run.pk %}" class="btn btn-secondary">
+                Run #{{ alert.run.pk }}
+              </a>
+            {% endif %}
+            {% if alert.run and alert.feature_name %}
+              <a href="{% url 'monitoring:feature_detail' alert.run.pk alert.feature_name %}" class="btn btn-secondary">
+                {{ alert.feature_name }} in detail
+              </a>
+            {% endif %}
+            <a href="{% url 'registry:overview' alert.ml_model.slug %}" class="btn btn-ghost">{{ alert.ml_model.name }}</a>
+          </div>
         </div>
+      </section>
     {% endif %}
+  </div>
 
-    <hr style="margin: 1.5rem 0; border-color: var(--border-color);">
+  <div class="dash-stack">
+    <section class="panel">
+      <div class="panel-head"><h3>Alert</h3></div>
+      <div class="panel-body is-flush">
+        <div class="list-line">
+          <span>Severity</span>
+          {% if alert.severity == 'CRITICAL' %}<span class="badge badge-critical">Critical</span>
+          {% elif alert.severity == 'WARNING' %}<span class="badge badge-warning">Warning</span>
+          {% else %}<span class="badge badge-secondary">Info</span>{% endif %}
+        </div>
+        <div class="list-line"><span>Status</span>{% status_badge alert.status %}</div>
+        <div class="list-line"><span>Category</span><span class="muted">{{ alert.get_category_display }}</span></div>
+        {% if alert.rule_code %}
+          <div class="list-line"><span>Rule</span><span><code>{{ alert.rule_code }}</code></span></div>
+        {% endif %}
+        <div class="list-line"><span>Seen</span><span class="muted">{{ alert.occurrence_count }} time{{ alert.occurrence_count|pluralize }}</span></div>
+        <div class="list-line"><span>First seen</span><span class="muted">{{ alert.first_seen_at|date:"d M Y H:i" }}</span></div>
+        <div class="list-line"><span>Last seen</span><span class="muted">{{ alert.last_seen_at|date:"d M Y H:i" }}</span></div>
+      </div>
+      <div class="panel-body">
+        <p class="muted tiny">
+          Repeats of the same problem raise the count instead of adding a row,
+          so a simulator running every 30 seconds cannot bury the queue.
+        </p>
+      </div>
+    </section>
 
-    <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
-        <p><strong>Category:</strong> {{ alert.category }}</p>
-        {% if alert.feature_name %}
-            <p><strong>Feature Name:</strong> <code>{{ alert.feature_name }}</code></p>
-        {% endif %}
-        <p><strong>Occurrence Count:</strong> {{ alert.occurrence_count }}</p>
-        <p><strong>First Seen:</strong> {{ alert.first_seen_at|date:"Y-m-d H:i:s" }}</p>
-        <p><strong>Last Seen:</strong> {{ alert.last_seen_at|date:"Y-m-d H:i:s" }}</p>
-        {% if alert.acknowledged_by %}
-            <p><strong>Acknowledged By:</strong> {{ alert.acknowledged_by.username }} on {{ alert.acknowledged_at|date:"Y-m-d H:i" }}</p>
-        {% endif %}
-    </div>
-
-    <div class="card" style="margin-top: 1.5rem; background-color: var(--bg-primary);">
-        <h4>Explanation & Message</h4>
-        <p style="margin-top: 0.5rem; color: var(--text-primary); font-family: var(--font-family); white-space: pre-wrap;">{{ alert.message }}</p>
-    </div>
-
-    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-        {% if alert.status == 'NEW' %}
-            <form method="post" action="{% url 'alerts:acknowledge' alert.id %}" style="flex: 1;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-secondary" style="width: 100%;">Acknowledge Alert</button>
-            </form>
-        {% endif %}
-        {% if alert.status != 'RESOLVED' %}
-            <form method="post" action="{% url 'alerts:resolve' alert.id %}" style="flex: 1;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Resolve Alert</button>
-            </form>
-        {% endif %}
-        <a href="{% url 'alerts:list' %}" class="btn btn-secondary">Back to Alerts</a>
-    </div>
+    {% if alert.acknowledged_by or alert.resolved_by %}
+      <section class="panel">
+        <div class="panel-head"><h3>Handling</h3></div>
+        <div class="panel-body is-flush">
+          {% if alert.acknowledged_by %}
+            <div class="list-line">
+              <span>Acknowledged</span>
+              <span class="muted">{{ alert.acknowledged_by.username }} · {{ alert.acknowledged_at|date:"d M H:i" }}</span>
+            </div>
+          {% endif %}
+          {% if alert.resolved_by %}
+            <div class="list-line">
+              <span>Resolved</span>
+              <span class="muted">{{ alert.resolved_by.username }} · {{ alert.resolved_at|date:"d M H:i" }}</span>
+            </div>
+          {% endif %}
+          {% if alert.resolution_note %}
+            <div class="list-line"><span>Note</span><span class="muted">{{ alert.resolution_note }}</span></div>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

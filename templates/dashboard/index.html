@@ -150,7 +150,7 @@ Administration-only panel. The audit trail existed from the start but had
           {% for entry in recent_activities %}
             <div class="list-line">
               <span>
-                <strong>{{ entry.username_attempted|default:entry.user.username }}</strong>
+                <strong>{% firstof entry.username_attempted entry.user.username "unknown" %}</strong>
                 — {{ entry.get_event_display }}
                 {% if entry.ip_address %}<span class="muted">from {{ entry.ip_address }}</span>{% endif %}
               </span>

@@ -137,12 +137,15 @@ def activate_version(version, user=None):
     Activates a ModelVersion, demoting the previous active version in one transaction.
     Calls monitoring baseline distribution calculation (Contract C2).
     """
-    # Check baseline dataset existence
-    if not hasattr(version.ml_model, "baseline_dataset") and not hasattr(
-        version.ml_model, "baselines"
-    ):
-        # If no baseline exists, check if baseline data sample works
-        pass
+    # A version that failed the validation gate must never become the active
+    # one. Nothing checked this, so a broken artifact could be activated and
+    # would then be loaded to score every subsequent batch — each run failing
+    # with an error that points at the batch rather than at the artifact.
+    if version.validation_status == ValidationStatus.FAILED:
+        raise ValidationError(
+            f"Version {version.label} failed validation and cannot be activated. "
+            "Upload a working artifact instead."
+        )
 
     version.activate()
 

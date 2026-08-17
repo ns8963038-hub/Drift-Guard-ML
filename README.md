@@ -59,7 +59,7 @@ python scripts/seed_demo.py
 pytest
 
 # 6. Run it
-python manage.py runserver --noreload
+DJANGO_DEBUG=0 python manage.py runserver --noreload
 ```
 
 Expected: **307 tests passing**.

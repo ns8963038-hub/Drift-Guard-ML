@@ -33,6 +33,17 @@ MAX_POINTS = 500
 
 RANGES = {"24h": 1, "7d": 7, "30d": 30, "all": None}
 
+# Order and labels for the range selector. A dict is ordered, but the labels
+# shown to a reader should not be derived from lookup keys.
+RANGE_CHOICES = [("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("all", "All")]
+DEFAULT_RANGE = "30d"
+
+
+def _selected_range(request):
+    """The requested range, or the default when it is missing or nonsense."""
+    requested = request.GET.get("range", DEFAULT_RANGE)
+    return requested if requested in RANGES else DEFAULT_RANGE
+
 
 def downsample(values, max_points=MAX_POINTS):
     """Evenly thin a series, always keeping the newest point.
@@ -50,7 +61,7 @@ def downsample(values, max_points=MAX_POINTS):
 
 def _runs_for(request, ml_model):
     """Completed runs for a model within the requested range, oldest first."""
-    window = RANGES.get(request.GET.get("range", "30d"), 30)
+    window = RANGES[_selected_range(request)]
     # select_related on the 1:1 children: without it every chart endpoint issues
     # one extra query per run, so a model with 500 runs costs 500 queries.
     queryset = ml_model.runs.filter(status=RunStatus.COMPLETED).select_related(
@@ -283,7 +294,7 @@ def chart_prediction_trend_api(request, slug):
 def chart_alerts_trend_api(request, slug):
     """FR-07.5 — alerts raised per day, split by severity."""
     ml_model = _model_or_404(request, slug)
-    window = RANGES.get(request.GET.get("range", "30d"), 30) or 90
+    window = RANGES[_selected_range(request)] or 90
     since = timezone.now() - timedelta(days=window)
 
     alerts = Alert.objects.filter(ml_model=ml_model, first_seen_at__gte=since)
@@ -362,7 +373,18 @@ def _tab_context(request, slug, tab):
         .order_by("-created_at")
         .first()
     )
-    return ml_model, latest, {"ml_model": ml_model, "run": latest, "tab": tab}
+    return (
+        ml_model,
+        latest,
+        {
+            "ml_model": ml_model,
+            "run": latest,
+            "tab": tab,
+            "nav": "models",
+            "ranges": RANGE_CHOICES,
+            "current_range": _selected_range(request),
+        },
+    )
 
 
 @login_required
@@ -387,12 +409,105 @@ def model_drift_tab_view(request, slug):
 @login_required
 def model_performance_tab_view(request, slug):
     ml_model, latest, context = _tab_context(request, slug, "performance")
-    context["performance"] = getattr(latest, "performance", None) if latest else None
+    snapshot = getattr(latest, "performance", None) if latest else None
+    context["performance"] = snapshot
+
+    # Pair each confusion-matrix row with its label here. Doing it in the
+    # template needs an index filter, and an off-by-one there mislabels which
+    # class the model is confusing — the one thing the matrix exists to show.
+    matrix = (snapshot.confusion_matrix or {}) if snapshot else {}
+    labels = matrix.get("labels") or []
+    context["confusion_rows"] = [
+        {"label": label, "cells": row, "correct_at": index}
+        for index, (label, row) in enumerate(zip(labels, matrix.get("matrix") or []))
+    ]
+    context["confusion_labels"] = labels
+
+    distribution = (snapshot.prediction_distribution or {}) if snapshot else {}
+    counts = distribution.get("counts") or {}
+    proportions = distribution.get("proportions") or {}
+    context["prediction_rows"] = [
+        {"label": label, "count": count, "share": proportions.get(label)}
+        for label, count in counts.items()
+    ]
     return render(request, "dashboard/model_performance_tab.html", context)
 
 
 @login_required
 def model_quality_tab_view(request, slug):
     ml_model, latest, context = _tab_context(request, slug, "quality")
-    context["quality"] = getattr(latest, "quality", None) if latest else None
+    report = getattr(latest, "quality", None) if latest else None
+    context["quality"] = report
+
+    if report:
+        # Thresholds come from the run's own snapshot, so a run always reports
+        # what it was judged against rather than what the settings say today.
+        saved = latest.thresholds_snapshot or {}
+        penalties = report.penalties or {}
+
+        def check(key, label, detail, measured, limit, penalty_key):
+            return {
+                "label": label,
+                "detail": detail,
+                "measured": f"{measured:.2f}%",
+                "threshold": f"{limit * 100:.2f}%" if limit is not None else "—",
+                "penalty": penalties.get(penalty_key) or 0,
+                "passed": limit is None or measured <= limit * 100,
+            }
+
+        context["checks"] = [
+            check(
+                "missing",
+                "Missing value rate",
+                "Cells with no value, across every column checked.",
+                report.missing_pct,
+                saved.get("missing_value_rate_threshold"),
+                "missing",
+            ),
+            check(
+                "duplicates",
+                "Duplicate row rate",
+                "Rows identical to another row in the same batch.",
+                report.duplicate_pct,
+                saved.get("duplicate_row_rate_threshold"),
+                "duplicates",
+            ),
+            check(
+                "outliers",
+                "Outlier rate",
+                "Numeric values outside the range seen in the baseline.",
+                report.outlier_pct,
+                saved.get("outlier_rate_threshold"),
+                "outliers",
+            ),
+        ]
+
+        # Only the columns with something wrong. Listing all 19 clean ones
+        # buries the two that need looking at.
+        problems = []
+        for name, info in (report.per_column or {}).items():
+            issues = []
+            if info.get("missing_pct"):
+                issues.append("missing values")
+            if info.get("unseen_categories"):
+                issues.append(
+                    f"{len(info['unseen_categories'])} unseen categor"
+                    + ("y" if len(info["unseen_categories"]) == 1 else "ies")
+                )
+            if name in (report.type_mismatch_columns or {}):
+                issues.append("type mismatch")
+            if name in (report.out_of_range_columns or {}):
+                issues.append("out of range")
+            if issues:
+                problems.append(
+                    {
+                        "name": name,
+                        "type": info.get("type", ""),
+                        "missing_pct": info.get("missing_pct") or 0,
+                        "issues": issues,
+                    }
+                )
+        problems.sort(key=lambda c: -c["missing_pct"])
+        context["problem_columns"] = problems
+
     return render(request, "dashboard/model_quality_tab.html", context)

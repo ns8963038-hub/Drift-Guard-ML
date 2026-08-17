@@ -59,8 +59,14 @@ than halfway through a walkthrough.
 ### 0.4 Start the server
 
 ```bash
-python manage.py runserver --noreload
+DJANGO_DEBUG=0 python manage.py runserver --noreload
 ```
+
+> `DJANGO_DEBUG=0` matters as much as `--noreload`. With DEBUG on, Django
+> replaces this project's own 403 and 404 pages with its developer pages — and
+> the debug 404 lists every URL pattern in the project, which is precisely what
+> the access-control demonstration claims a 404 does *not* reveal.
+
 
 ☑ Prints `Starting development server at http://127.0.0.1:8000/`.
 
@@ -616,7 +622,7 @@ s = MLModel.objects.get(slug='customer-churn-model').scenarios.first()
 s.next_batch_index = 8; s.interval_seconds = 15; s.status='STOPPED'; s.save()
 print('reset to batch 8, one batch every 15 seconds')
 "
-python manage.py runserver --noreload
+DJANGO_DEBUG=0 python manage.py runserver --noreload
 ```
 
 ### 12.2 Start it and watch

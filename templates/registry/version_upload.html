@@ -1,39 +1,59 @@
 {% extends "base.html" %}
 
-{% block header_title %}Upload Model Version: {{ ml_model.name }}{% endblock %}
+{% block title %}Upload version · DriftGuard{% endblock %}
+{% block header_title %}Upload a version{% endblock %}
+
+{% block breadcrumb %}
+  <p class="breadcrumb">
+    <a href="{% url 'registry:list' %}">Models</a> /
+    <a href="{% url 'registry:overview' ml_model.slug %}">{{ ml_model.name }}</a> /
+    <a href="{% url 'registry:versions' ml_model.slug %}">Versions</a> / Upload
+  </p>
+{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 550px; margin: 0 auto;">
-    <h3>Upload Model Version Artifact</h3>
-    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.5rem;">
-        Upload a trained scikit-learn model artifact (<code>.joblib</code> or <code>.pkl</code>). The artifact will be validated against the 5-check quality gate before saving.
-    </p>
+<div class="panel form-narrow">
+  <div class="panel-body">
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+      {% csrf_token %}
 
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-critical" style="display: block; padding: 0.75rem; margin-bottom: 0.5rem; white-space: pre-wrap; text-align: left;">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        </div>
-    {% endif %}
+      <label class="field">
+        <span class="field-label">Version label <span class="muted">— optional</span></span>
+        <input type="text" name="label" placeholder="V2">
+        <span class="field-hint">Left blank, the next number in sequence is used.</span>
+      </label>
 
-    <form method="post" enctype="multipart/form-data" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-        {% csrf_token %}
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Version Label (Optional)</label>
-            <input type="text" name="label" class="btn btn-secondary" style="width: 100%; text-align: left;" placeholder="e.g. V1, V2.1">
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Model Artifact File (.joblib or .pkl)</label>
-            <input type="file" name="artifact" class="btn btn-secondary" style="width: 100%; text-align: left;" accept=".pkl,.joblib" required>
-        </div>
+      <label class="field">
+        <span class="field-label">Artifact file</span>
+        <input type="file" name="artifact" accept=".pkl,.joblib" required>
+        <span class="field-hint">
+          A pickled scikit-learn estimator, <code>.joblib</code> or <code>.pkl</code>.
+        </span>
+      </label>
 
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-            <button type="submit" class="btn btn-primary" style="flex: 1;">Validate & Upload</button>
-            <a href="{% url 'registry:versions' ml_model.slug %}" class="btn btn-secondary">Cancel</a>
-        </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Validate and upload</button>
+        <a href="{% url 'registry:versions' ml_model.slug %}" class="btn btn-ghost">Cancel</a>
+      </div>
     </form>
+  </div>
+</div>
+
+<div class="panel form-narrow">
+  <div class="panel-head"><h3>What the upload is checked against</h3></div>
+  <div class="panel-body">
+    <p class="muted tiny">
+      An artifact is not saved until it passes all five checks. A model that
+      cannot score a batch is worse than no model at all — it fails silently at
+      the moment it is asked to do the one thing it exists for.
+    </p>
+    <ol class="check-list">
+      <li>The file loads, and what comes out is a scikit-learn estimator.</li>
+      <li>It exposes <code>predict</code>.</li>
+      <li>It actually scores a sample drawn from this model's baseline.</li>
+      <li>Its expected feature names match the baseline's columns.</li>
+      <li>The file is within the size limit.</li>
+    </ol>
+  </div>
 </div>
 {% endblock %}

@@ -1,14 +1,22 @@
 {% extends "base.html" %}
 
-{% block header_title %}404 Page Not Found{% endblock %}
+{% block title %}Not found · DriftGuard{% endblock %}
+{% block header_title %}Not found{% endblock %}
 
 {% block content %}
-<div class="card" style="text-align: center; padding: 3rem;">
-    <h1 style="font-size: 3rem; color: var(--color-warning);">404</h1>
-    <h3 style="margin-top: 1rem;">Page Not Found</h3>
-    <p style="color: var(--text-secondary); margin-top: 0.5rem;">
-        The page you are looking for does not exist.
+<div class="panel form-narrow">
+  <div class="panel-body">
+    <p class="status-code">404</p>
+    <h3>There is nothing at this address.</h3>
+    <p class="muted">
+      Either it does not exist, or it belongs to a model you have not been
+      granted. Both look the same on purpose — a "denied" page would confirm
+      that something is there to find.
     </p>
-    <a href="{% url 'dashboard:index' %}" class="btn btn-primary" style="margin-top: 1.5rem;">Return to Dashboard</a>
+    <div class="form-actions">
+      <a href="{% url 'dashboard:index' %}" class="btn btn-primary">Back to dashboard</a>
+      <a href="{% url 'registry:list' %}" class="btn btn-ghost">Models you can see</a>
+    </div>
+  </div>
 </div>
 {% endblock %}

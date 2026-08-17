@@ -303,3 +303,80 @@ def test_login_url_setting_matches_the_real_login_route(client):
 
     assert settings.LOGIN_URL == reverse("accounts:login")
     assert client.get(settings.LOGIN_URL).status_code == 200
+
+
+@pytest.mark.django_db
+def test_renaming_a_user_onto_a_taken_username_is_rejected_not_a_500(client):
+    """The uniqueness check existed only on the create path.
+
+    Renaming an existing user onto a taken name reached save() and raised
+    IntegrityError — a 500 on an ordinary typo.
+    """
+    User.objects.create_user(username="root", password="p", role=Role.ADMIN)
+    User.objects.create_user(username="taken", password="p", role=Role.ANALYST)
+    victim = User.objects.create_user(
+        username="victim", password="p", role=Role.ANALYST
+    )
+    client.login(username="root", password="p")
+
+    response = client.post(
+        reverse("accounts:user_edit", args=[victim.id]),
+        {"username": "taken", "email": "", "role": Role.ANALYST, "is_active": "on"},
+    )
+    assert response.status_code == 200
+    assert "already taken" in response.content.decode()
+    victim.refresh_from_db()
+    assert victim.username == "victim"
+
+
+@pytest.mark.django_db
+def test_an_admin_cannot_lock_themselves_out(client):
+    """Demoting or deactivating yourself removes the only way back in."""
+    admin = User.objects.create_user(username="solo", password="p", role=Role.ADMIN)
+    client.login(username="solo", password="p")
+    url = reverse("accounts:user_edit", args=[admin.id])
+
+    demote = client.post(
+        url, {"username": "solo", "email": "", "role": Role.ANALYST, "is_active": "on"}
+    )
+    assert "cannot remove your own Administrator role" in demote.content.decode()
+
+    deactivate = client.post(url, {"username": "solo", "email": "", "role": Role.ADMIN})
+    assert "cannot deactivate your own account" in deactivate.content.decode()
+
+    admin.refresh_from_db()
+    assert admin.role == Role.ADMIN and admin.is_active
+
+
+@pytest.mark.django_db
+def test_blank_username_is_rejected_rather_than_raising(client):
+    """create_user() raises ValueError on a blank username — a 500, not a message."""
+    User.objects.create_user(username="root2", password="p", role=Role.ADMIN)
+    client.login(username="root2", password="p")
+
+    response = client.post(
+        reverse("accounts:user_create"),
+        {"username": "  ", "email": "", "role": Role.ANALYST, "password": "x"},
+    )
+    assert response.status_code == 200
+    assert "username is required" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_rejected_user_form_keeps_what_was_typed(client):
+    User.objects.create_user(username="root3", password="p", role=Role.ADMIN)
+    User.objects.create_user(username="clash", password="p", role=Role.ANALYST)
+    client.login(username="root3", password="p")
+
+    response = client.post(
+        reverse("accounts:user_create"),
+        {
+            "username": "clash",
+            "email": "keep@me.test",
+            "role": Role.DATA_SCIENTIST,
+            "password": "x",
+        },
+    )
+    body = response.content.decode()
+    assert 'value="clash"' in body
+    assert 'value="keep@me.test"' in body

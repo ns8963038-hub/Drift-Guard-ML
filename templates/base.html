@@ -16,7 +16,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-<div class="layout-wrapper">
+<div class="layout-wrapper{% if not user.is_authenticated %} is-anonymous{% endif %}">
 
   {% comment %}
 ── Sidebar ──────────────────────────────────────────────────────
@@ -24,6 +24,7 @@
      Showing an action that then refuses the click is worse than not
      showing it, and it is why all three roles previously looked alike.
 {% endcomment %}
+  {% if user.is_authenticated %}
   <aside class="sidebar">
     <a href="{% url 'dashboard:index' %}" class="brand">
       <span class="brand-mark">◆</span>
@@ -85,6 +86,7 @@ Previously unreachable: the admin screens existed but nothing linked
       <a href="{% url 'accounts:logout' %}" class="btn btn-ghost btn-block">Sign out</a>
     </div>
   </aside>
+  {% endif %}
 
   {# ── Content ──────────────────────────────────────────────────── #}
   <main class="main-content">

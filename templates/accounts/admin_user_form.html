@@ -1,52 +1,58 @@
 {% extends "base.html" %}
 
-{% block header_title %}{% if target_user %}Edit User: {{ target_user.username }}{% else %}Create New User{% endif %}{% endblock %}
+{% block title %}{% if target_user %}Edit {{ target_user.username }}{% else %}Create user{% endif %} · DriftGuard{% endblock %}
+{% block header_title %}{% if target_user %}Edit {{ target_user.username }}{% else %}Create a user{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+  <p class="breadcrumb"><a href="{% url 'accounts:user_list' %}">Users</a> / {% if target_user %}{{ target_user.username }}{% else %}New{% endif %}</p>
+{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 500px; margin: 0 auto;">
-    <h3>{% if target_user %}Edit User: {{ target_user.username }}{% else %}Create New User{% endif %}</h3>
+<div class="panel form-narrow">
+  <div class="panel-body">
+    <form method="post" class="form-grid">
+      {% csrf_token %}
 
-    {% if messages %}
-        <div style="margin-top: 1rem;">
-            {% for message in messages %}
-                <div class="badge badge-critical" style="display: block; padding: 0.5rem; margin-bottom: 0.5rem;">{{ message }}</div>
-            {% endfor %}
-        </div>
-    {% endif %}
+      <label class="field">
+        <span class="field-label">Username</span>
+        <input type="text" name="username" value="{{ values.username }}" required autofocus>
+      </label>
 
-    <form method="post" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-        {% csrf_token %}
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Username</label>
-            <input type="text" name="username" value="{{ target_user.username|default:'' }}" class="btn btn-secondary" style="width: 100%; text-align: left;" required>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Email</label>
-            <input type="email" name="email" value="{{ target_user.email|default:'' }}" class="btn btn-secondary" style="width: 100%; text-align: left;">
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Role</label>
-            <select name="role" class="btn btn-secondary" style="width: 100%; text-align: left;">
-                {% for code, label in roles %}
-                    <option value="{{ code }}" {% if target_user and target_user.role == code %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">
-                Password {% if target_user %}(Leave blank to keep current password){% endif %}
-            </label>
-            <input type="password" name="password" class="btn btn-secondary" style="width: 100%; text-align: left;" {% if not target_user %}required{% endif %}>
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <input type="checkbox" name="is_active" id="is_active" {% if not target_user or target_user.is_active %}checked{% endif %}>
-            <label for="is_active" style="font-size: 0.875rem;">Account Active</label>
-        </div>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <input type="email" name="email" value="{{ values.email }}">
+      </label>
 
-        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-            <button type="submit" class="btn btn-primary" style="flex: 1;">Save User</button>
-            <a href="{% url 'accounts:user_list' %}" class="btn btn-secondary">Cancel</a>
-        </div>
+      <label class="field">
+        <span class="field-label">Role</span>
+        <select name="role">
+          {% for code, label in roles %}
+            <option value="{{ code }}" {% if values.role == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <span class="field-hint">
+          Administrator manages users and sees every model. Data Scientist owns
+          models and their thresholds. Analyst uploads batches and works alerts.
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="field-label">
+          Password{% if target_user %} <span class="muted">— leave blank to keep the current one</span>{% endif %}
+        </span>
+        <input type="password" name="password" autocomplete="new-password" {% if not target_user %}required{% endif %}>
+      </label>
+
+      <label class="field checkbox">
+        <input type="checkbox" name="is_active" {% if values.is_active %}checked{% endif %}>
+        <span>Account active — clearing this blocks sign-in without deleting anything the user owns</span>
+      </label>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{% if target_user %}Save changes{% else %}Create user{% endif %}</button>
+        <a href="{% url 'accounts:user_list' %}" class="btn btn-ghost">Cancel</a>
+      </div>
     </form>
+  </div>
 </div>
 {% endblock %}

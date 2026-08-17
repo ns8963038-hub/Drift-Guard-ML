@@ -189,3 +189,69 @@ def test_register_button_is_shown_only_to_roles_that_may_create(client):
     User.objects.create_user(username="an4", password="p", role=Role.ANALYST)
     client.login(username="an4", password="p")
     assert create_url not in client.get(reverse("registry:list")).content.decode()
+
+
+@pytest.mark.django_db
+def test_a_version_that_failed_validation_cannot_be_activated():
+    """Activation checked nothing, so a broken artifact could become active.
+
+    Every subsequent run would then load that artifact to score its batch and
+    fail — with an error pointing at the batch rather than the artifact.
+    """
+    from django.core.exceptions import ValidationError
+    from core.constants import ValidationStatus, VersionStatus
+    from registry.models import ModelVersion
+    from registry.services import activate_version
+
+    user = User.objects.create_user(
+        username="dsact", password="p", role=Role.DATA_SCIENTIST
+    )
+    model = MLModel.objects.create(
+        name="Act",
+        slug="act",
+        target_column="t",
+        problem_type=ProblemType.BINARY,
+        owner=user,
+    )
+    broken = ModelVersion.objects.create(
+        ml_model=model,
+        label="V1",
+        validation_status=ValidationStatus.FAILED,
+        status=VersionStatus.INACTIVE,
+    )
+
+    with pytest.raises(ValidationError):
+        activate_version(broken, user=user)
+
+    broken.refresh_from_db()
+    assert broken.status != VersionStatus.ACTIVE
+
+
+@pytest.mark.django_db
+def test_activation_refusal_is_shown_as_a_message_not_a_500(client):
+    from core.constants import ValidationStatus, VersionStatus
+    from registry.models import ModelVersion
+
+    user = User.objects.create_user(
+        username="dsact2", password="p", role=Role.DATA_SCIENTIST
+    )
+    model = MLModel.objects.create(
+        name="Act2",
+        slug="act2",
+        target_column="t",
+        problem_type=ProblemType.BINARY,
+        owner=user,
+    )
+    broken = ModelVersion.objects.create(
+        ml_model=model,
+        label="V1",
+        validation_status=ValidationStatus.FAILED,
+        status=VersionStatus.INACTIVE,
+    )
+    client.login(username="dsact2", password="p")
+
+    response = client.post(
+        reverse("registry:version_activate", args=[model.slug, broken.id]), follow=True
+    )
+    assert response.status_code == 200
+    assert "failed validation" in response.content.decode()

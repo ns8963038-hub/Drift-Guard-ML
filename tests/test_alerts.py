@@ -156,3 +156,49 @@ def test_escalating_alert_updates_its_headline_not_only_its_severity():
     assert escalated.headline == "High drift detected — tenure"
     assert escalated.rule_code == "DRIFT_HIGH"
     assert escalated.message == "PSI 0.41"
+
+
+@pytest.mark.django_db
+def test_recommendation_triggers_render_as_values_not_python_reprs(client):
+    """Each trigger is a dict; printing the dict shows a raw Python repr.
+
+    The recommendations screen exists to show *why* retraining is advised, and
+    it was rendering {'trigger': '...', 'measured': '...'} braces and all.
+    """
+    from alerts.models import RetrainRecommendation
+    from core.constants import RetrainSeverity, RetrainStatus
+    from django.urls import reverse
+
+    user = User.objects.create_user(
+        username="recu", password="p", role=Role.DATA_SCIENTIST
+    )
+    model = MLModel.objects.create(
+        name="Rec",
+        slug="rec",
+        target_column="t",
+        problem_type=ProblemType.BINARY,
+        owner=user,
+    )
+    from registry.models import ModelVersion
+
+    version = ModelVersion.objects.create(ml_model=model, label="V1")
+    RetrainRecommendation.objects.create(
+        ml_model=model,
+        version=version,
+        severity=RetrainSeverity.URGENT,
+        status=RetrainStatus.OPEN,
+        triggers=[
+            {
+                "trigger": "Accuracy has fallen",
+                "measured": "0.6514",
+                "threshold": "5 point drop",
+            }
+        ],
+    )
+    client.login(username="recu", password="p")
+
+    body = client.get(reverse("alerts:recommendations")).content.decode()
+    assert "Accuracy has fallen" in body
+    assert "0.6514" in body
+    assert "5 point drop" in body
+    assert "{&#x27;trigger&#x27;" not in body and "{'trigger'" not in body

@@ -1,53 +1,89 @@
 {% extends "registry/model_tab_shell.html" %}
 
 {% block tab_content %}
-<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
-    <div>
-        <div class="card">
-            <h3>Active Version Overview</h3>
-            {% if active_ver %}
-                <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600; font-size: 1.1rem;">{{ active_ver.label }}</span>
-                        <span class="badge badge-healthy">ACTIVE</span>
-                    </div>
-                    <p style="color: var(--text-secondary); font-size: 0.875rem;">Uploaded {{ active_ver.created_at|date:"Y-m-d H:i" }}</p>
-                    <p style="color: var(--text-secondary); font-size: 0.875rem;">Artifact: <code>{{ active_ver.artifact.name }}</code></p>
-                </div>
-            {% else %}
-                <p style="color: var(--text-secondary); margin-top: 1rem;">No active version currently set for this model.</p>
-                <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-primary" style="margin-top: 1rem; display: inline-block;">Upload First Version</a>
-            {% endif %}
-        </div>
-
-        <div class="card">
-            <h3>Model Audit Log Timeline</h3>
-            <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                {% for log in audit_logs %}
-                    <div style="border-left: 2px solid var(--accent-primary); padding-left: 1rem;">
-                        <div style="font-weight: 600; font-size: 0.9rem;">{{ log.get_action_display }}</div>
-                        <div style="color: var(--text-secondary); font-size: 0.75rem;">By {{ log.actor.username|default:"System" }} on {{ log.timestamp|date:"Y-m-d H:i:s" }}</div>
-                    </div>
-                {% empty %}
-                    <p style="color: var(--text-secondary);">No audit records found.</p>
-                {% endfor %}
+<div class="dash-cols">
+  <div class="dash-stack">
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Active version</h3>
+        {% if can_manage_models and active_ver %}
+          <a href="{% url 'registry:versions' ml_model.slug %}" class="panel-link">All versions &rarr;</a>
+        {% endif %}
+      </div>
+      <div class="panel-body">
+        {% if active_ver %}
+          <div class="model-row-top">
+            <div>
+              <span class="model-row-name">{{ active_ver.label }}</span>
+              <p class="muted tiny">Uploaded {{ active_ver.created_at|date:"d M Y H:i" }}</p>
             </div>
-        </div>
-    </div>
-
-    <div>
-        <div class="card">
-            <h3>Model Metadata</h3>
-            <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.875rem;">
-                <p><strong>Owner:</strong> {{ ml_model.owner.username }}</p>
-                <p><strong>Target Column:</strong> <code>{{ ml_model.target_column }}</code></p>
-                {% if ml_model.positive_class %}
-                    <p><strong>Positive Class:</strong> <code>{{ ml_model.positive_class }}</code></p>
-                {% endif %}
-                <p><strong>Created:</strong> {{ ml_model.created_at|date:"Y-m-d" }}</p>
-                <p><strong>Description:</strong> {{ ml_model.description|default:"None provided." }}</p>
+            <span class="badge badge-good">✓ Active</span>
+          </div>
+          <p class="muted tiny">Artifact <code>{{ active_ver.artifact.name }}</code></p>
+          <p class="muted tiny">
+            This is the artifact every incoming batch is scored with. Past runs
+            keep the version they were actually scored with, so activating a
+            different one never rewrites history.
+          </p>
+        {% else %}
+          <p class="empty-state">
+            <strong>No active version.</strong><br>
+            Nothing can be scored until an artifact is active.
+          </p>
+          {% if can_manage_models %}
+            <div class="form-actions">
+              <a href="{% url 'registry:train' ml_model.slug %}" class="btn btn-primary">Train one here</a>
+              <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-secondary">Upload an artifact</a>
             </div>
+          {% endif %}
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h3>Audit log</h3>
+        <span class="muted tiny">Most recent first</span>
+      </div>
+      <div class="panel-body">
+        {% for log in audit_logs %}
+          <div class="timeline-entry">
+            <strong>{{ log.get_action_display }}</strong>
+            <span class="muted tiny">
+              {{ log.actor.username|default:"system" }} · {{ log.timestamp|date:"d M Y H:i" }}
+            </span>
+          </div>
+        {% empty %}
+          <p class="empty-state">Nothing recorded for this model yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <div class="dash-stack">
+    <section class="panel">
+      <div class="panel-head"><h3>Details</h3></div>
+      <div class="panel-body is-flush">
+        <div class="list-line"><span>Owner</span><span><strong>{{ ml_model.owner.username }}</strong></span></div>
+        <div class="list-line"><span>Target column</span><span><code>{{ ml_model.target_column }}</code></span></div>
+        {% if ml_model.positive_class %}
+          <div class="list-line"><span>Positive class</span><span><code>{{ ml_model.positive_class }}</code></span></div>
+        {% endif %}
+        <div class="list-line"><span>Problem type</span><span class="muted">{{ ml_model.get_problem_type_display }}</span></div>
+        <div class="list-line"><span>Created</span><span class="muted">{{ ml_model.created_at|date:"d M Y" }}</span></div>
+        <div class="list-line">
+          <span>State</span>
+          {% if ml_model.is_active %}
+            <span class="badge badge-good">Active</span>
+          {% else %}
+            <span class="badge badge-muted">Deactivated</span>
+          {% endif %}
         </div>
-    </div>
+      </div>
+      <div class="panel-body">
+        <p class="muted tiny">{{ ml_model.description|default:"No description provided." }}</p>
+      </div>
+    </section>
+  </div>
 </div>
 {% endblock %}

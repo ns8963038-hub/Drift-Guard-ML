@@ -1,74 +1,108 @@
 {% extends "base.html" %}
 
-{% block header_title %}Model Access Control (Admin){% endblock %}
+{% block title %}Access grants · DriftGuard{% endblock %}
+{% block header_title %}Access grants{% endblock %}
+
+{% block header_subtitle %}
+  <p class="muted tiny">
+    Access is granted per user, per model. A user with no grant on a model does
+    not get a "denied" page for it — the model is simply not there, and its URL
+    returns 404, so probing cannot reveal that it exists.
+  </p>
+{% endblock %}
 
 {% block content %}
-<div class="card">
-    <h3>Grant Access Permission</h3>
-    <form method="post" style="margin-top: 1rem; display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-        {% csrf_token %}
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">User</label>
-            <select name="user_id" class="btn btn-secondary" style="text-align: left;" required>
-                {% for u in users %}
-                    <option value="{{ u.id }}">{{ u.username }} ({{ u.get_role_display }})</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Model</label>
-            <select name="model_id" class="btn btn-secondary" style="text-align: left;" required>
-                {% for m in models %}
-                    <option value="{{ m.id }}">{{ m.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Permission</label>
-            <select name="permission" class="btn btn-secondary" style="text-align: left;">
-                {% for code, label in permissions %}
-                    <option value="{{ code }}">{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <button type="submit" name="action" value="grant" class="btn btn-primary">Grant Access</button>
+
+<div class="panel">
+  <div class="panel-head"><h3>Grant access</h3></div>
+  <div class="panel-body">
+    <form method="post" class="grant-form">
+      {% csrf_token %}
+      <label class="field">
+        <span class="field-label">User</span>
+        <select name="user_id" required>
+          {% for u in users %}
+            <option value="{{ u.id }}">{{ u.username }} — {{ u.get_role_display }}</option>
+          {% empty %}
+            <option value="" disabled>No non-admin users exist</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Model</span>
+        <select name="model_id" required>
+          {% for m in models %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Permission</span>
+        <select name="permission">
+          {% for code, label in permissions %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+        <span class="field-hint">View reads and uploads batches. Manage also configures the model.</span>
+      </label>
+      <button type="submit" name="action" value="grant" class="btn btn-primary">Grant</button>
     </form>
+    <p class="muted tiny">
+      Administrators are absent from the list on purpose: they can already see
+      every model, so granting them one would imply the others were restricted.
+    </p>
+  </div>
 </div>
 
-<div class="card">
-    <h3>Current Access Grants</h3>
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 1rem;">
-        <thead>
-            <tr style="text-align: left; border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
-                <th style="padding: 0.75rem;">User</th>
-                <th style="padding: 0.75rem;">Model</th>
-                <th style="padding: 0.75rem;">Permission</th>
-                <th style="padding: 0.75rem;">Granted By</th>
-                <th style="padding: 0.75rem;">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for g in grants %}
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                    <td style="padding: 0.75rem; font-weight: 600;">{{ g.user.username }}</td>
-                    <td style="padding: 0.75rem;">{{ g.ml_model.name }}</td>
-                    <td style="padding: 0.75rem;"><span class="badge badge-healthy">{{ g.get_permission_display }}</span></td>
-                    <td style="padding: 0.75rem; color: var(--text-secondary);">{{ g.granted_by.username|default:"System" }}</td>
-                    <td style="padding: 0.75rem;">
-                        <form method="post" style="display: inline;">
-                            {% csrf_token %}
-                            <input type="hidden" name="user_id" value="{{ g.user.id }}">
-                            <input type="hidden" name="model_id" value="{{ g.ml_model.id }}">
-                            <button type="submit" name="action" value="revoke" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; color: var(--color-critical);">Revoke</button>
-                        </form>
-                    </td>
-                </tr>
-            {% empty %}
-                <tr>
-                    <td colspan="5" style="padding: 1rem; color: var(--text-secondary);">No custom model access grants created yet.</td>
-                </tr>
-            {% endfor %}
-        </tbody>
+<div class="panel">
+  <div class="panel-head">
+    <h3>Current grants</h3>
+    <span class="muted tiny">{{ grants|length }} in force</span>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Model</th>
+          <th>Permission</th>
+          <th>Granted by</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in grants %}
+          <tr>
+            <td>
+              <strong>{{ g.user.username }}</strong>
+              <span class="role-chip role-{{ g.user.role|lower }}">{{ g.user.get_role_display }}</span>
+            </td>
+            <td>{{ g.ml_model.name }}</td>
+            <td>
+              {% if g.permission == 'MANAGE' %}
+                <span class="badge badge-warning">Manage</span>
+              {% else %}
+                <span class="badge badge-secondary">View</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ g.granted_by.username|default:"system" }}</td>
+            <td>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="user_id" value="{{ g.user.id }}">
+                <input type="hidden" name="model_id" value="{{ g.ml_model.id }}">
+                <button type="submit" name="action" value="revoke" class="btn btn-danger btn-sm">Revoke</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5">
+              <p class="empty-state">
+                <strong>No grants yet.</strong><br>
+                Owners always reach their own models; grants are for everyone else.
+              </p>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

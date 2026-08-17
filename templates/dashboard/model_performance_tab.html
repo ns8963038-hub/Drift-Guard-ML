@@ -1,42 +1,171 @@
 {% extends "registry/model_tab_shell.html" %}
+{% load monitoring_extras %}
+
+{% comment %}
+Previously a placeholder chart and two rows of invented metrics
+   ("82.4% / 78.1% / 75.2%"). The snapshot was already in the context.
+{% endcomment %}
 
 {% block tab_content %}
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h3>Model Performance Metrics</h3>
-        <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">24h</button>
-            <button class="btn btn-primary" style="font-size: 0.8rem;">7d</button>
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">30d</button>
-            <button class="btn btn-secondary" style="font-size: 0.8rem;">All</button>
-        </div>
-    </div>
 
-    <div class="card" style="margin-bottom: 0;">
-        <h4>Accuracy, Precision, Recall & F1 Over Time</h4>
-        <div class="chart-container" style="display: flex; justify-content: center; align-items: center; background: var(--bg-primary); border-radius: 0.5rem; margin-top: 1rem;">
-            <p style="color: var(--text-secondary); font-size: 0.875rem;">📉 [Chart.js: Performance metrics time series endpoint loaded]</p>
-        </div>
-        <div class="table-disclosure">
-            <details>
-                <summary style="cursor: pointer; color: var(--accent-primary);">View as table</summary>
-                <table style="width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.8rem;">
-                    <thead>
-                        <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
-                            <th>Timestamp</th>
-                            <th>Accuracy</th>
-                            <th>Precision</th>
-                            <th>Recall</th>
-                            <th>F1 Score</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>2026-08-17 12:00</td><td>82.4%</td><td>78.1%</td><td>75.2%</td><td>76.6%</td></tr>
-                        <tr><td>2026-08-17 06:00</td><td>83.0%</td><td>79.0%</td><td>76.0%</td><td>77.4%</td></tr>
-                    </tbody>
-                </table>
-            </details>
-        </div>
+{% if not run %}
+  <div class="panel">
+    <div class="panel-body">
+      <p class="empty-state">
+        <strong>No completed monitoring run yet.</strong><br>
+        Performance is measured when a batch arrives.
+      </p>
     </div>
+  </div>
+{% else %}
+
+<div class="tab-toolbar">
+  <div class="run-context">
+    <span>Latest run <a href="{% url 'monitoring:run_detail' run.pk %}">#{{ run.pk }}</a></span>
+    <span class="muted">·</span>
+    <span class="muted">{{ run.created_at|date:"d M Y H:i" }}</span>
+    {% if run.model_version %}
+      <span class="muted">·</span>
+      <span class="muted">{{ run.model_version.label }}</span>
+    {% endif %}
+  </div>
+  {% include "dashboard/_range_selector.html" %}
 </div>
+
+{% if not performance or not performance.labels_available %}
+  {% comment %}
+Not an error, and not zero. A batch without ground truth simply cannot
+     be scored, and showing 0% would make a healthy model look broken.
+{% endcomment %}
+  <div class="alert-banner warning">
+    <strong>This batch arrived without ground truth.</strong>
+    Accuracy, precision, recall and F1 cannot be computed for it, so they are
+    shown as gaps in the chart rather than zeros. Include the
+    <code>{{ ml_model.target_column }}</code> column in an upload to score it.
+  </div>
+{% else %}
+  <div class="stat-grid">
+    <div class="stat-card is-brand">
+      <span class="stat-head">Accuracy</span>
+      <span class="stat-num">{{ performance.accuracy|ratio }}</span>
+      <span class="stat-foot">{{ performance.sample_count }} rows scored</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-head">Precision</span>
+      <span class="stat-num">{{ performance.precision_positive|default:performance.precision_macro|ratio }}</span>
+      <span class="stat-foot">
+        {% if performance.positive_class %}class “{{ performance.positive_class }}”{% else %}macro average{% endif %}
+      </span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-head">Recall</span>
+      <span class="stat-num">{{ performance.recall_positive|default:performance.recall_macro|ratio }}</span>
+      <span class="stat-foot">of actual positives found</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-head">F1</span>
+      <span class="stat-num">{{ performance.f1_positive|default:performance.f1_macro|ratio }}</span>
+      <span class="stat-foot">precision and recall combined</span>
+    </div>
+  </div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>Performance over time</h3>
+    <span class="muted tiny">Unlabelled runs appear as gaps, never as zero</span>
+  </div>
+  <div class="panel-body">
+    <div class="chart-container"><canvas id="performanceChart"></canvas></div>
+    <details class="table-view">
+      <summary>View as table</summary>
+      <div id="performanceTable"></div>
+    </details>
+  </div>
+</div>
+
+{% if confusion_rows %}
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Confusion matrix</h3>
+      <span class="muted tiny">Latest run · rows are actual, columns are predicted</span>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table confusion">
+        <thead>
+          <tr>
+            <th>Actual \ Predicted</th>
+            {% for label in confusion_labels %}<th class="num">{{ label }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in confusion_rows %}
+            <tr>
+              <th>{{ row.label }}</th>
+              {% for cell in row.cells %}
+                <td class="num {% if forloop.counter0 == row.correct_at %}is-correct{% endif %}">{{ cell }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-body">
+      <p class="muted tiny">
+        The shaded diagonal is what the model got right. Everything off it is a
+        mistake, and the two kinds of mistake rarely cost the same.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% if prediction_rows %}
+  <div class="panel">
+    <div class="panel-head">
+      <h3>What the model predicted</h3>
+      <span class="muted tiny">Across {{ performance.sample_count }} rows</span>
+    </div>
+    <div class="panel-body is-flush">
+      {% for row in prediction_rows %}
+        <div class="list-line">
+          <span><strong>{{ row.label }}</strong></span>
+          <span class="muted">{{ row.count }} · {{ row.share|ratio }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if run %}
+<script>
+(function () {
+  var url = "{% url 'dashboard:chart_performance' ml_model.slug %}" + window.location.search;
+  fetch(url)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var series = data.series;
+      DriftGuardCharts.createLineChart("performanceChart", data.labels, {
+        Accuracy: series.accuracy,
+        Precision: series.precision,
+        Recall: series.recall,
+        F1: series.f1
+      });
+      var rows = data.labels.map(function (label, i) {
+        function show(v) { return v === null ? "no labels" : (v * 100).toFixed(1) + "%"; }
+        return [label, show(series.accuracy[i]), show(series.precision[i]),
+                show(series.recall[i]), show(series.f1[i])];
+      });
+      DriftGuardCharts.buildTableView(
+        "performanceTable",
+        ["Run", "Accuracy", "Precision", "Recall", "F1"],
+        rows
+      );
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

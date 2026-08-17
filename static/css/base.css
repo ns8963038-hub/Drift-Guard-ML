@@ -312,3 +312,7 @@ h4 { font-size: 0.875rem; font-weight: 640; margin-top: 1.25rem; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* A logged-out visitor (a 404, say) has no navigation to show, so the content
+   column takes the full width instead of leaving a gap where a sidebar isn't. */
+.layout-wrapper.is-anonymous .main-content { margin: 0 auto; width: 100%; }

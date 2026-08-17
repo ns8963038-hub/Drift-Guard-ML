@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 
-{% block header_title %}403 Access Denied{% endblock %}
+{% block title %}Access denied · DriftGuard{% endblock %}
+{% block header_title %}Access denied{% endblock %}
 
 {% block content %}
-<div class="card" style="text-align: center; padding: 3rem;">
-    <h1 style="font-size: 3rem; color: var(--color-critical);">403</h1>
-    <h3 style="margin-top: 1rem;">Model not found or access denied.</h3>
-    <p style="color: var(--text-secondary); margin-top: 0.5rem;">
-        You do not have permission to access this resource or model.
+<div class="panel form-narrow">
+  <div class="panel-body">
+    <p class="status-code">403</p>
+    <h3>Your role does not allow this.</h3>
+    <p class="muted">
+      You are signed in{% if user.is_authenticated %} as <strong>{{ user.username }}</strong>
+      ({{ role_label }}){% endif %}, and this action belongs to a different role.
+      This is enforced by the server, not merely hidden from the screen.
     </p>
-    <a href="{% url 'dashboard:index' %}" class="btn btn-primary" style="margin-top: 1.5rem;">Return to Dashboard</a>
+    <div class="form-actions">
+      <a href="{% url 'dashboard:index' %}" class="btn btn-primary">Back to dashboard</a>
+    </div>
+  </div>
 </div>
 {% endblock %}

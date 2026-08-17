@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import django
@@ -31,11 +32,13 @@ os.environ["SCHEDULER_ENABLED"] = "False"
 django.setup()
 
 from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
 from accounts.models import ModelAccess, User  # noqa: E402
-from alerts.models import ThresholdProfile  # noqa: E402
+from alerts.models import Alert, ThresholdProfile  # noqa: E402
 from core.constants import Permission, ProblemType, Role, VersionStatus  # noqa: E402
 from datasets.services import create_baseline_dataset  # noqa: E402
+from monitoring.models import MonitoringRun  # noqa: E402
 from monitoring.services import compute_baseline_prediction_distribution  # noqa: E402
 from registry.models import MLModel, ModelVersion  # noqa: E402
 from simulator import services as sim_services  # noqa: E402
@@ -228,6 +231,50 @@ def generate_history(scenario, count):
     for index, status, health in milestones:
         log(f"  batch {index:>2}: {status:<9} health {health}")
 
+    _spread_over_time(scenario.ml_model, count)
+
+
+def _spread_over_time(ml_model, count, hours_apart=6):
+    """Backdate the seeded runs so they occupy a plausible stretch of time.
+
+    Seeding runs them in a burst, so all `count` runs land within about a
+    second. Every chart's x-axis then reads the same "17 Aug 13:15" `count`
+    times over, and "last run 4 hours ago" is identical for all of them —
+    on a product whose entire subject is change over time.
+
+    `created_at` is auto_now_add, so it can only be rewritten through a
+    queryset update, which bypasses the field's auto behaviour.
+    """
+    runs = list(
+        MonitoringRun.objects.filter(ml_model=ml_model).order_by("created_at", "pk")
+    )
+    if not runs:
+        return
+    # The newest run finishes an hour ago, the rest step back from there, so
+    # the demo always looks freshly active regardless of when it was seeded.
+    end = timezone.now() - timedelta(hours=1)
+    stamps = {}
+    for offset, run in enumerate(reversed(runs)):
+        stamp = end - timedelta(hours=hours_apart * offset)
+        stamps[run.pk] = stamp
+        MonitoringRun.objects.filter(pk=run.pk).update(
+            created_at=stamp, started_at=stamp, completed_at=stamp
+        )
+
+    # Alerts carry auto_now_add/auto_now stamps of their own, so they show the
+    # seeding burst too. An alert points at the run that last raised it, and it
+    # was first seen roughly one occurrence-interval per occurrence earlier.
+    earliest = min(stamps.values())
+    for alert in Alert.objects.filter(ml_model=ml_model):
+        last = stamps.get(alert.run_id, end)
+        first = last - timedelta(hours=hours_apart * max(alert.occurrence_count - 1, 0))
+        Alert.objects.filter(pk=alert.pk).update(
+            last_seen_at=last, first_seen_at=max(first, earliest)
+        )
+
+    span = hours_apart * (len(runs) - 1) / 24
+    log(f"  spread {len(runs)} runs over {span:.1f} days, newest 1 hour ago")
+
 
 def seed_access(users, models):
     """Deliberately asymmetric, so RBAC can be demonstrated rather than claimed.
@@ -245,7 +292,20 @@ def seed_access(users, models):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reset", action="store_true", help="delete demo data first")
+    # Reset is the default. Both README.md and the walkthrough tell the reader
+    # to run this script plainly, and the old opt-in --reset meant a second run
+    # appended a second set of runs to the first — 32 became 64, the charts grew
+    # a duplicate history, and nothing said so.
+    parser.add_argument(
+        "--keep",
+        action="store_true",
+        help="add to existing demo data instead of replacing it (rarely wanted)",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help=argparse.SUPPRESS,  # accepted for compatibility; now the default
+    )
     parser.add_argument("--runs", type=int, default=32, help="history runs to generate")
     args = parser.parse_args()
 
@@ -258,7 +318,9 @@ def main():
     manifest = json.loads(MANIFEST.read_text())
 
     print("Seeding DriftGuard demo data\n")
-    if args.reset:
+    if args.keep:
+        log("keeping existing demo data (--keep)")
+    else:
         reset()
 
     print("Users")
@@ -287,7 +349,7 @@ def main():
         print(f"  {username:<6} / {PASSWORD:<16} {role:<15} {label}")
     print(
         "\nThe demo script is in docs/APP_FLOW.md §8. Start the server with:\n"
-        "  python manage.py runserver --noreload\n"
+        "  DJANGO_DEBUG=0 python manage.py runserver --noreload\n"
         "(--noreload matters: the autoreloader would start a second scheduler.)"
     )
     return 0

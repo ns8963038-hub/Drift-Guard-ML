@@ -223,8 +223,14 @@ def model_version_activate_view(request, slug, version_id):
     version = get_object_or_404(ModelVersion, pk=version_id, ml_model=ml_model)
 
     if request.method == "POST":
-        activate_version(version, user=request.user)
-        messages.success(request, f"Version {version.label} activated successfully!")
+        # activate_version now refuses a version that failed validation; without
+        # catching it the refusal would surface as a 500 instead of a message.
+        try:
+            activate_version(version, user=request.user)
+        except ValidationError as exc:
+            messages.error(request, getattr(exc, "message", None) or str(exc))
+        else:
+            messages.success(request, f"Version {version.label} is now active.")
         return redirect("registry:versions", slug=ml_model.slug)
 
     return redirect("registry:versions", slug=ml_model.slug)
