@@ -14,9 +14,10 @@
 > your work phase by phase, and **§7 is every single thing you depend on Nandan for**, including
 > how to stub each one so you are never blocked waiting.
 >
-> ⛔ **Before you run a single `startapp`:** `monitoring/` already exists and holds Track A's
-> engine. `startapp monitoring` will fail, and deleting the directory would destroy his work.
-> The correct commands are in **§6, Phase 0, task 1**. Read that box first.
+> ⛔ **Before you run a single `startapp`:** `monitoring/` and `simulator/` already exist and
+> hold Track A's engine and drift transforms. `startapp` will fail on both, and deleting either
+> directory would destroy his work. The correct commands are in **§6, Phase 0, task 1**. Read
+> that box first.
 
 ---
 
@@ -86,10 +87,10 @@ edit the same file as the other person.
 | `requirements.txt` | Split into blocks by comment. Edit only your own block. **Already created** with the full stack for both tracks, so Phase 0 does not need to author it. |
 | `pytest.ini` | **Already created.** Track B extends it in Phase 0 with `DJANGO_SETTINGS_MODULE`. |
 
-> `monitoring/` already contains `engine/` and its `__init__.py`. Phase 0 must **not**
-> run `django-admin startapp monitoring` — it fails on a non-empty directory. Create
-> `apps.py`, `admin.py` and `migrations/__init__.py` by hand, or generate the app
-> elsewhere and move those files in.
+> `monitoring/` and `simulator/` already contain Track A code. Phase 0 must **not**
+> run `django-admin startapp` on either — it fails on a non-empty directory. Create
+> `apps.py`, `admin.py` and `migrations/__init__.py` by hand instead. Full commands
+> in §6, Phase 0, task 1.
 
 ### 3.2 Shared files needing coordination
 
@@ -189,10 +190,11 @@ logs/
    `core`, `accounts`, `registry`, `datasets`, `monitoring`, `alerts`, `simulator`, `dashboard`,
    `apiv1` — create Nandan's apps too, empty. Five minutes, unblocks him immediately.
 
-   > ### ⛔ `startapp monitoring` WILL FAIL — read before you run it
+   > ### ⛔ `startapp monitoring` and `startapp simulator` WILL FAIL — read first
    >
-   > Track A started before Phase 0, so **`monitoring/` already exists** and contains the
-   > drift engine. `django-admin startapp` refuses to run on a non-empty directory:
+   > Track A started before Phase 0, so **`monitoring/` and `simulator/` already
+   > exist** — they hold the drift engine and the drift-injection transforms.
+   > `django-admin startapp` refuses to run on a non-empty directory:
    >
    > ```
    > CommandError: '/path/to/ML PROJECT/monitoring' already exists
@@ -208,13 +210,15 @@ logs/
    > python manage.py startapp registry
    > python manage.py startapp datasets
    > python manage.py startapp alerts
-   > python manage.py startapp simulator
    > python manage.py startapp dashboard
    > python manage.py startapp apiv1
    >
-   > # monitoring/ exists already — hand-create only the Django app files:
-   > touch monitoring/models.py monitoring/admin.py monitoring/views.py
-   > mkdir -p monitoring/migrations && touch monitoring/migrations/__init__.py
+   > # monitoring/ and simulator/ exist already — hand-create only the Django
+   > # app files inside them:
+   > for app in monitoring simulator; do
+   >   touch $app/models.py $app/admin.py $app/views.py
+   >   mkdir -p $app/migrations && touch $app/migrations/__init__.py
+   > done
    > ```
    >
    > …then write `monitoring/apps.py`:
@@ -228,8 +232,10 @@ logs/
    >     name = "monitoring"
    > ```
    >
-   > Register `monitoring` in `INSTALLED_APPS` like any other app. **Never touch
-   > `monitoring/engine/` — that is Track A's.**
+   > …and the same for `simulator/apps.py` with `SimulatorConfig` / `name = "simulator"`.
+   >
+   > Register both in `INSTALLED_APPS` like any other app. **Never touch
+   > `monitoring/engine/` or `simulator/transforms.py` — those are Track A's.**
    >
    > **General rule:** if any app directory already exists when you get to Phase 0,
    > Track A got there first. Hand-create the Django files around it; never `startapp`
