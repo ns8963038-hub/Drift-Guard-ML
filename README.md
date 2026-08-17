@@ -177,6 +177,7 @@ Written before any code, and kept in step with it.
 | [BACKEND_FLOW](docs/BACKEND_FLOW.md) | The monitoring pipeline, transactions, scheduling |
 | [IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md) | 13 phases with acceptance criteria |
 | [WORK_SPLIT](docs/WORK_SPLIT.md) | Who builds what, and the contracts between the two halves |
+| [**WALKTHROUGH**](docs/WALKTHROUGH.md) | **Start here to learn the system** — a guided tour that doubles as a full test pass |
 
 The PRD owns *what the numbers are*; the TRD owns *how they are computed*. Where a
 formula is needed in both it is referenced, never restated — so the two cannot
