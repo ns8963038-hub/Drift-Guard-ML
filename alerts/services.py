@@ -7,6 +7,7 @@ from core.constants import (
     AlertSeverity,
     AlertCategory,
     AlertStatus,
+    DriftStatus,
 )
 
 
@@ -75,14 +76,21 @@ def create_or_update_alert(
     message,
     feature_name="",
     run_id=None,
-    cooldown_hours=1,
+    rule_code="",
+    cooldown_minutes=None,
 ):
+    """Deduplicate on (model, category, feature_name) — PRD §9.3.
+
+    While an unresolved alert with that key exists inside the cooldown window,
+    increment its occurrence counter instead of inserting a row. Without this a
+    30-second simulator produces hundreds of identical alerts within minutes and
+    the alerts screen becomes unusable.
     """
-    Deduplicates alerts by key (model, category, feature_name).
-    If an unresolved alert exists within the cooldown window, increment occurrence_count
-    and update last_seen_at instead of creating duplicate database rows.
-    """
-    cooldown_threshold = timezone.now() - timedelta(hours=cooldown_hours)
+    if cooldown_minutes is None:
+        cooldown_minutes = resolve_thresholds(ml_model).get(
+            "alert_cooldown_minutes", 60
+        )
+    cooldown_threshold = timezone.now() - timedelta(minutes=cooldown_minutes)
 
     existing = Alert.objects.filter(
         ml_model=ml_model,
@@ -107,6 +115,7 @@ def create_or_update_alert(
         run_id=run_id,
         severity=severity,
         category=category,
+        rule_code=rule_code,
         feature_name=feature_name,
         headline=headline,
         message=message,
@@ -118,61 +127,127 @@ def create_or_update_alert(
 
 @transaction.atomic
 def evaluate(run):
+    """Contract C15 — the PRD §9.1 rule set, evaluated against a completed run.
+
+    Every rule carries a ``rule_code`` so deduplication and the auto-resolve
+    sweep can match on it without parsing prose.
     """
-    Contract C15: Evaluates alert rules against a monitoring run.
-    """
-    if not run or not hasattr(run, "ml_model"):
+    if run is None:
         return []
 
     ml_model = run.ml_model
     thresholds = resolve_thresholds(ml_model)
-    alerts_created = []
+    raised = []
 
-    # Health score evaluation
-    health_score = getattr(run, "health_score", 100)
-    if health_score is not None:
-        if health_score < thresholds["health_critical_threshold"]:
-            alert = create_or_update_alert(
+    def raise_alert(rule_code, severity, category, headline, message, feature_name=""):
+        raised.append(
+            create_or_update_alert(
                 ml_model=ml_model,
-                category=AlertCategory.HEALTH,
-                severity=AlertSeverity.CRITICAL,
-                headline="Critical Model Health Degradation",
-                message=f"Model health score dropped to {health_score} (below critical threshold {thresholds['health_critical_threshold']}).",
-                run_id=getattr(run, "id", None),
+                category=category,
+                severity=severity,
+                headline=headline,
+                message=message,
+                feature_name=feature_name,
+                run_id=run.pk,
+                rule_code=rule_code,
+                cooldown_minutes=thresholds.get("alert_cooldown_minutes", 60),
             )
-            alerts_created.append(alert)
-        elif health_score < thresholds["health_warning_threshold"]:
-            alert = create_or_update_alert(
-                ml_model=ml_model,
-                category=AlertCategory.HEALTH,
-                severity=AlertSeverity.WARNING,
-                headline="Model Health Warning",
-                message=f"Model health score dropped to {health_score} (below warning threshold {thresholds['health_warning_threshold']}).",
-                run_id=getattr(run, "id", None),
+        )
+
+    # ── drift, per feature (§9.1 DRIFT_HIGH / DRIFT_MODERATE) ─────────
+    for result in run.feature_results.all():
+        if result.status == DriftStatus.HIGH:
+            raise_alert(
+                "DRIFT_HIGH",
+                AlertSeverity.CRITICAL,
+                AlertCategory.DRIFT,
+                f"High drift detected — {result.feature_name}",
+                result.explanation
+                or f"PSI {result.psi:.3f} exceeds the high threshold.",
+                feature_name=result.feature_name,
             )
-            alerts_created.append(alert)
+        elif result.status == DriftStatus.MODERATE:
+            raise_alert(
+                "DRIFT_MODERATE",
+                AlertSeverity.WARNING,
+                AlertCategory.DRIFT,
+                f"Moderate drift detected — {result.feature_name}",
+                result.explanation
+                or f"PSI {result.psi:.3f} exceeds the moderate threshold.",
+                feature_name=result.feature_name,
+            )
 
-    # Feature drift evaluation
-    if hasattr(run, "feature_drift_results"):
-        for res in run.feature_drift_results.all():
-            if getattr(res, "drift_status", "") in ["MODERATE", "HIGH"]:
-                severity = (
-                    AlertSeverity.CRITICAL
-                    if res.drift_status == "HIGH"
-                    else AlertSeverity.WARNING
-                )
-                alert = create_or_update_alert(
-                    ml_model=ml_model,
-                    category=AlertCategory.DRIFT,
-                    severity=severity,
-                    feature_name=res.feature_name,
-                    headline=f"Feature Drift Detected: {res.feature_name}",
-                    message=f"Feature '{res.feature_name}' exhibits {res.drift_status.lower()} drift.",
-                    run_id=getattr(run, "id", None),
-                )
-                alerts_created.append(alert)
+    # ── performance (§9.1 PERFORMANCE_DROP_*) ─────────────────────────
+    snapshot = getattr(run, "performance", None)
+    if snapshot is not None and snapshot.accuracy is not None:
+        from monitoring.services import reference_accuracy_for
 
-    return alerts_created
+        reference = (
+            reference_accuracy_for(run.model_version) if run.model_version else None
+        )
+        if reference is not None:
+            drop = reference - snapshot.accuracy
+            if drop >= thresholds["accuracy_drop_major"]:
+                raise_alert(
+                    "PERFORMANCE_DROP_MAJOR",
+                    AlertSeverity.CRITICAL,
+                    AlertCategory.PERFORMANCE,
+                    "Accuracy has fallen sharply",
+                    f"Accuracy is {snapshot.accuracy:.4f}, {drop * 100:.1f} points below "
+                    f"the reference of {reference:.4f}.",
+                )
+            elif drop >= thresholds["accuracy_drop_minor"]:
+                raise_alert(
+                    "PERFORMANCE_DROP_MINOR",
+                    AlertSeverity.WARNING,
+                    AlertCategory.PERFORMANCE,
+                    "Accuracy has fallen",
+                    f"Accuracy is {snapshot.accuracy:.4f}, {drop * 100:.1f} points below "
+                    f"the reference of {reference:.4f}.",
+                )
+
+    # ── data quality (§9.1 QUALITY_*) ─────────────────────────────────
+    quality = getattr(run, "quality", None)
+    if quality is not None:
+        if quality.quality_score < 50:
+            raise_alert(
+                "QUALITY_POOR",
+                AlertSeverity.CRITICAL,
+                AlertCategory.QUALITY,
+                "Incoming data quality is poor",
+                f"Data quality scored {quality.quality_score}/100.",
+            )
+        elif quality.quality_score < 70:
+            raise_alert(
+                "QUALITY_DEGRADED",
+                AlertSeverity.WARNING,
+                AlertCategory.QUALITY,
+                "Incoming data quality has degraded",
+                f"Data quality scored {quality.quality_score}/100.",
+            )
+
+    # ── health (§9.1 HEALTH_*) ────────────────────────────────────────
+    if run.health_score is not None:
+        if run.health_score < thresholds["health_critical_threshold"]:
+            raise_alert(
+                "HEALTH_CRITICAL",
+                AlertSeverity.CRITICAL,
+                AlertCategory.HEALTH,
+                "Model health is critical",
+                f"Health score {run.health_score}/100, below the critical threshold "
+                f"of {thresholds['health_critical_threshold']}.",
+            )
+        elif run.health_score < thresholds["health_warning_threshold"]:
+            raise_alert(
+                "HEALTH_WARNING",
+                AlertSeverity.WARNING,
+                AlertCategory.HEALTH,
+                "Model health has degraded",
+                f"Health score {run.health_score}/100, below the healthy threshold "
+                f"of {thresholds['health_warning_threshold']}.",
+            )
+
+    return raised
 
 
 @transaction.atomic
