@@ -1,7 +1,86 @@
+from functools import wraps
+
 from django.contrib.auth.mixins import AccessMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from core.constants import Role, Permission
+
+
+def role_required(*allowed_roles):
+    """Function-view equivalent of RoleRequiredMixin.
+
+    Most views in this project are function-based, so the class mixins below
+    could not be applied to them. Without this, `@login_required` was the only
+    gate on `registry/` and `alerts/` — which authenticates the user but
+    authorises nothing, and let an ML Engineer create models and reach the
+    version upload form in violation of PRD §5.2.
+
+    Admin and superusers always pass.
+    """
+
+    def decorator(view):
+        @wraps(view)
+        def wrapper(request, *args, **kwargs):
+            user = request.user
+            if not user.is_authenticated:
+                raise PermissionDenied("Authentication required.")
+            if user.role == Role.ADMIN or user.is_superuser:
+                return view(request, *args, **kwargs)
+            if user.role not in allowed_roles:
+                raise PermissionDenied("Your role does not permit this action.")
+            return view(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def model_permission_required(required_permission=Permission.VIEW):
+    """Function-view equivalent of ModelAccessRequiredMixin.
+
+    Resolves the model from the ``slug`` URL kwarg and checks the caller's grant.
+    A missing model and a denied model raise the same error, so probing URLs
+    reveals nothing about what exists (PRD FR-01.7).
+    """
+
+    def decorator(view):
+        @wraps(view)
+        def wrapper(request, *args, **kwargs):
+            user = request.user
+            if not user.is_authenticated:
+                raise PermissionDenied("Authentication required.")
+            if user.role == Role.ADMIN or user.is_superuser:
+                return view(request, *args, **kwargs)
+
+            slug = kwargs.get("slug") or kwargs.get("model_slug")
+            if not slug:
+                return view(request, *args, **kwargs)
+
+            from registry.models import MLModel
+
+            ml_model = MLModel.objects.filter(slug=slug).first()
+            if ml_model is None:
+                raise PermissionDenied("Model not found or access denied.")
+
+            if ml_model.owner == user:
+                return view(request, *args, **kwargs)
+
+            from accounts.models import ModelAccess
+
+            grant = ModelAccess.objects.filter(user=user, ml_model=ml_model).first()
+            if grant is None:
+                raise PermissionDenied("Model not found or access denied.")
+            if (
+                required_permission == Permission.MANAGE
+                and grant.permission != Permission.MANAGE
+            ):
+                raise PermissionDenied("You require MANAGE permission for this model.")
+
+            return view(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def visible_models(user):

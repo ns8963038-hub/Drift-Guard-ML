@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from accounts.models import User, ModelAccess
 from registry.models import MLModel
@@ -62,3 +63,230 @@ def test_admin_user_list_access(client):
     client.login(username="admin", password="p")
     response = client.get(url)
     assert response.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PRD §5.2 — the full permission matrix
+#
+# Phase 1's acceptance criterion is that *every row* of the matrix has a
+# passing test. It is written out row by row rather than as a loop over a
+# table, so a reviewer can put this file beside PRD §5.2 and check them off.
+#
+# This is the gate that would have caught registry/views.py shipping with
+# @login_required and no role check, which let an ML Engineer create models
+# and reach the version upload form.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def people(db):
+    """One user of each role, plus a model owned by the Data Scientist."""
+    admin = User.objects.create_user(username="a", password="p", role=Role.ADMIN)
+    scientist = User.objects.create_user(
+        username="ds", password="p", role=Role.DATA_SCIENTIST
+    )
+    engineer = User.objects.create_user(
+        username="eng", password="p", role=Role.ML_ENGINEER
+    )
+    outsider = User.objects.create_user(
+        username="out", password="p", role=Role.ML_ENGINEER
+    )
+
+    ml_model = MLModel.objects.create(
+        name="Churn",
+        slug="churn",
+        target_column="Churn",
+        problem_type=ProblemType.BINARY,
+        owner=scientist,
+    )
+    ModelAccess.objects.create(
+        user=engineer, ml_model=ml_model, permission=Permission.VIEW
+    )
+    return {
+        "admin": admin,
+        "scientist": scientist,
+        "engineer": engineer,
+        "outsider": outsider,
+        "model": ml_model,
+    }
+
+
+def _reach(client, user, url, method="get", data=None):
+    """True when `user` can reach `url` — i.e. is not blocked by 403/404."""
+    client.force_login(user)
+    try:
+        response = getattr(client, method)(url, data or {})
+    except PermissionDenied:
+        return False
+    return response.status_code not in (403, 404)
+
+
+# ── Row: Create / edit / deactivate users — Admin only ────────────────
+
+
+def test_matrix_manage_users(client, people):
+    url = reverse("accounts:user_list")
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is False
+    assert _reach(client, people["engineer"], url) is False
+
+
+# ── Row: Grant or revoke model access — Admin only ────────────────────
+
+
+def test_matrix_manage_access_grants(client, people):
+    url = reverse("accounts:access_grants")
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is False
+    assert _reach(client, people["engineer"], url) is False
+
+
+# ── Row: View login activity (all users) — Admin only ─────────────────
+
+
+def test_matrix_view_login_activity(client, people):
+    url = reverse("accounts:login_activity")
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is False
+    assert _reach(client, people["engineer"], url) is False
+
+
+# ── Row: View own profile — every role ────────────────────────────────
+
+
+def test_matrix_view_own_profile(client, people):
+    url = reverse("accounts:profile")
+    for role in ("admin", "scientist", "engineer"):
+        assert _reach(client, people[role], url) is True, role
+
+
+# ── Row: Create model — Admin + Data Scientist, NOT ML Engineer ───────
+
+
+def test_matrix_create_model_is_denied_to_ml_engineer(client, people):
+    """The bug this file exists to prevent.
+
+    An ML Engineer reaching this view could create models, and from there the
+    version upload screen — which accepts pickled artifacts that execute code
+    on load. Restricting upload to Admin and Data Scientist is the stated
+    mitigation for accepted risk R1, so this row is a security control.
+    """
+    url = reverse("registry:create")
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is True
+    assert _reach(client, people["engineer"], url) is False
+
+
+@pytest.mark.django_db
+def test_matrix_ml_engineer_cannot_create_a_model_by_post(client, people):
+    """Verified at the data layer, not just the response code."""
+    before = MLModel.objects.count()
+    client.force_login(people["engineer"])
+    try:
+        client.post(
+            reverse("registry:create"),
+            {
+                "name": "Sneaky",
+                "target_column": "y",
+                "problem_type": ProblemType.BINARY,
+            },
+        )
+    except PermissionDenied:
+        pass
+    assert MLModel.objects.count() == before, "an ML Engineer created a model"
+
+
+# ── Row: Upload model version — Admin + Data Scientist with MANAGE ────
+
+
+def test_matrix_upload_version(client, people):
+    url = reverse("registry:version_upload", args=[people["model"].slug])
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is True
+    assert _reach(client, people["engineer"], url) is False, "VIEW grant is not enough"
+
+
+# ── Row: Edit threshold profile — Admin + Data Scientist with MANAGE ──
+
+
+def test_matrix_edit_thresholds(client, people):
+    url = reverse("alerts:thresholds", args=[people["model"].slug])
+    assert _reach(client, people["admin"], url) is True
+    assert _reach(client, people["scientist"], url) is True
+    assert _reach(client, people["engineer"], url) is False
+
+
+# ── Row: View model dashboards / drift / history — granted users ──────
+
+
+def test_matrix_view_granted_model(client, people):
+    for name in ("overview", "versions"):
+        url = reverse(f"registry:{name}", args=[people["model"].slug])
+        assert _reach(client, people["admin"], url) is True, name
+        assert _reach(client, people["scientist"], url) is True, name
+        assert _reach(client, people["engineer"], url) is True, name
+
+
+def test_matrix_ungranted_model_is_unreachable(client, people):
+    """FR-01.7 — and indistinguishable from the model not existing."""
+    url = reverse("registry:overview", args=[people["model"].slug])
+    assert _reach(client, people["outsider"], url) is False
+
+
+# ── Row: Compare versions — granted users ─────────────────────────────
+
+
+def test_matrix_version_comparison(client, people):
+    url = reverse("registry:compare", args=[people["model"].slug])
+    assert _reach(client, people["engineer"], url) is True
+    assert _reach(client, people["outsider"], url) is False
+
+
+# ── Row: Monitoring history — granted users ───────────────────────────
+
+
+def test_matrix_monitoring_history(client, people):
+    url = reverse("registry:history", args=[people["model"].slug])
+    assert _reach(client, people["engineer"], url) is True
+    assert _reach(client, people["outsider"], url) is False
+
+
+# ── Row: View + acknowledge alerts — granted users ────────────────────
+
+
+def test_matrix_alerts_list(client, people):
+    url = reverse("alerts:list")
+    for role in ("admin", "scientist", "engineer"):
+        assert _reach(client, people[role], url) is True, role
+
+
+# ── Row: Retraining recommendations — granted users ───────────────────
+
+
+def test_matrix_recommendations(client, people):
+    url = reverse("alerts:recommendations")
+    for role in ("admin", "scientist", "engineer"):
+        assert _reach(client, people[role], url) is True, role
+
+
+# ── Row: Dashboard — every role, scoped to what they may see ──────────
+
+
+def test_matrix_dashboard(client, people):
+    url = reverse("dashboard:index")
+    for role in ("admin", "scientist", "engineer"):
+        assert _reach(client, people[role], url) is True, role
+
+
+# ── Cross-cutting: nothing is reachable while logged out ──────────────
+
+
+def test_matrix_anonymous_is_locked_out(client, people):
+    for url in [
+        reverse("dashboard:index"),
+        reverse("registry:list"),
+        reverse("alerts:list"),
+        reverse("accounts:user_list"),
+    ]:
+        response = client.get(url)
+        assert response.status_code in (302, 403), url

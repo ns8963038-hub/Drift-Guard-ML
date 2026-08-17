@@ -7,9 +7,14 @@ SECRET_KEY = os.getenv(
     "SECRET_KEY", "django-insecure-drift-guard-ml-dev-key-change-in-prod"
 )
 
-DEBUG = True
+# Base defaults are the SAFE ones. dev.py opens them up; prod.py leaves them
+# closed. Defaulting to DEBUG=True and ALLOWED_HOSTS=["*"] here meant that any
+# settings module which forgot to override them would ship a debug server open
+# to every host — the failure mode should be "refuses to serve", not "serves
+# tracebacks to anyone".
+DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     "django.contrib.admin",

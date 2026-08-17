@@ -51,10 +51,11 @@ def dashboard_index(request):
 
 @login_required
 def chart_performance_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
     days = int(request.GET.get("days", 30))
 
-    # Mock / real run points with downsampling
     timestamps = []
     accuracy = []
     precision = []
@@ -91,6 +92,8 @@ def chart_performance_api(request, slug):
 
 @login_required
 def chart_drift_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
     days = int(request.GET.get("days", 30))
 
@@ -126,6 +129,8 @@ def chart_drift_api(request, slug):
 
 @login_required
 def chart_distribution_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
     data = {
@@ -139,6 +144,8 @@ def chart_distribution_api(request, slug):
 
 @login_required
 def chart_prediction_trend_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
     timestamps = []
@@ -168,6 +175,8 @@ def chart_prediction_trend_api(request, slug):
 
 @login_required
 def chart_alerts_trend_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
     timestamps = []
@@ -196,6 +205,8 @@ def chart_alerts_trend_api(request, slug):
 
 @login_required
 def chart_health_trend_api(request, slug):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
     timestamps = []
@@ -220,6 +231,8 @@ def chart_health_trend_api(request, slug):
 
 @login_required
 def chart_feature_distribution_api(request, slug, feature_name):
+    # STUB: returns generated placeholder points, not real data.
+    # Repoint at MonitoringRun once Track A's models land (contract C3).
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
     data = {

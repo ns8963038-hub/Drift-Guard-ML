@@ -9,8 +9,11 @@ from core.constants import Role, VersionStatus, ProblemType, ValidationStatus
 
 @pytest.mark.django_db
 def test_create_model_and_audit(client):
+    # Data Scientist, not ML Engineer. PRD §5.2 forbids an ML Engineer from
+    # creating models; this test previously used one and asserted success,
+    # which locked the missing role check in as expected behaviour.
     user = User.objects.create_user(
-        username="creator", password="p", role=Role.ML_ENGINEER
+        username="creator", password="p", role=Role.DATA_SCIENTIST
     )
     client.login(username="creator", password="p")
 

@@ -1,11 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from core.mixins import role_required, model_permission_required
+from core.constants import Role, Permission
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied
 
 from alerts.models import ThresholdProfile, Alert, RetrainRecommendation
-from core.constants import AlertSeverity, AlertStatus, RetrainStatus, Role, Permission
+from core.constants import AlertSeverity, AlertStatus, RetrainStatus
 from core.mixins import visible_models
 
 
@@ -68,15 +70,23 @@ def alert_resolve_view(request, alert_id):
 
 
 @login_required
+@role_required(Role.DATA_SCIENTIST)
+@model_permission_required(Permission.MANAGE)
 def threshold_settings_view(request, slug):
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
+    # Ownership implies MANAGE. PRD §5.1: the creator of a model automatically
+    # receives a MANAGE grant, so the owner and a MANAGE grant-holder are the
+    # same authority. Checking only for the grant row made this view disagree
+    # with visible_models() and with model_permission_required(), and would lock
+    # a Data Scientist out of their own model if the grant row were ever missing.
     if request.user.role != Role.ADMIN and not request.user.is_superuser:
-        grant = ml_model.access_grants.filter(user=request.user).first()
-        if not grant or grant.permission != Permission.MANAGE:
-            raise PermissionDenied(
-                "Threshold configuration requires MANAGE permission."
-            )
+        if ml_model.owner_id != request.user.id:
+            grant = ml_model.access_grants.filter(user=request.user).first()
+            if not grant or grant.permission != Permission.MANAGE:
+                raise PermissionDenied(
+                    "Threshold configuration requires MANAGE permission."
+                )
 
     profile, _ = ThresholdProfile.objects.get_or_create(ml_model=ml_model)
 

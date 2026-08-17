@@ -10,7 +10,8 @@ from registry.models import MLModel, ModelVersion, ModelAuditLog
 from registry.services import create_model_version, activate_version
 from accounts.models import ModelAccess
 from core.constants import ProblemType, Permission
-from core.mixins import visible_models
+from core.mixins import visible_models, role_required, model_permission_required
+from core.constants import Role
 
 
 @login_required
@@ -20,6 +21,7 @@ def model_list_view(request):
 
 
 @login_required
+@role_required(Role.DATA_SCIENTIST)
 def model_create_edit_view(request, slug=None):
     ml_model = get_object_or_404(MLModel, slug=slug) if slug else None
 
@@ -115,6 +117,8 @@ def model_versions_view(request, slug):
 
 
 @login_required
+@role_required(Role.DATA_SCIENTIST)
+@model_permission_required(Permission.MANAGE)
 def model_version_upload_view(request, slug):
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
 
@@ -143,6 +147,8 @@ def model_version_upload_view(request, slug):
 
 
 @login_required
+@role_required(Role.DATA_SCIENTIST)
+@model_permission_required(Permission.MANAGE)
 def model_version_activate_view(request, slug, version_id):
     ml_model = get_object_or_404(visible_models(request.user), slug=slug)
     version = get_object_or_404(ModelVersion, pk=version_id, ml_model=ml_model)
