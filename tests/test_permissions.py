@@ -10,12 +10,8 @@ from core.mixins import visible_models
 @pytest.mark.django_db
 def test_visible_models():
     admin = User.objects.create_user(username="admin", password="p", role=Role.ADMIN)
-    owner = User.objects.create_user(
-        username="owner", password="p", role=Role.ML_ENGINEER
-    )
-    other = User.objects.create_user(
-        username="other", password="p", role=Role.ML_ENGINEER
-    )
+    owner = User.objects.create_user(username="owner", password="p", role=Role.ANALYST)
+    other = User.objects.create_user(username="other", password="p", role=Role.ANALYST)
 
     m1 = MLModel.objects.create(
         name="Model A",
@@ -49,12 +45,12 @@ def test_visible_models():
 
 @pytest.mark.django_db
 def test_admin_user_list_access(client):
-    User.objects.create_user(username="engineer", password="p", role=Role.ML_ENGINEER)
+    User.objects.create_user(username="engineer", password="p", role=Role.ANALYST)
     User.objects.create_user(username="admin", password="p", role=Role.ADMIN)
 
     url = reverse("accounts:user_list")
 
-    # ML Engineer gets 403
+    # Analyst gets 403
     client.login(username="engineer", password="p")
     response = client.get(url)
     assert response.status_code == 403
@@ -73,7 +69,7 @@ def test_admin_user_list_access(client):
 # table, so a reviewer can put this file beside PRD §5.2 and check them off.
 #
 # This is the gate that would have caught registry/views.py shipping with
-# @login_required and no role check, which let an ML Engineer create models
+# @login_required and no role check, which let an Analyst create models
 # and reach the version upload form.
 # ──────────────────────────────────────────────────────────────────────
 
@@ -85,12 +81,8 @@ def people(db):
     scientist = User.objects.create_user(
         username="ds", password="p", role=Role.DATA_SCIENTIST
     )
-    engineer = User.objects.create_user(
-        username="eng", password="p", role=Role.ML_ENGINEER
-    )
-    outsider = User.objects.create_user(
-        username="out", password="p", role=Role.ML_ENGINEER
-    )
+    engineer = User.objects.create_user(username="eng", password="p", role=Role.ANALYST)
+    outsider = User.objects.create_user(username="out", password="p", role=Role.ANALYST)
 
     ml_model = MLModel.objects.create(
         name="Churn",
@@ -160,13 +152,13 @@ def test_matrix_view_own_profile(client, people):
         assert _reach(client, people[role], url) is True, role
 
 
-# ── Row: Create model — Admin + Data Scientist, NOT ML Engineer ───────
+# ── Row: Create model — Admin + Data Scientist, NOT Analyst ───────
 
 
-def test_matrix_create_model_is_denied_to_ml_engineer(client, people):
+def test_matrix_create_model_is_denied_to_analyst(client, people):
     """The bug this file exists to prevent.
 
-    An ML Engineer reaching this view could create models, and from there the
+    An Analyst reaching this view could create models, and from there the
     version upload screen — which accepts pickled artifacts that execute code
     on load. Restricting upload to Admin and Data Scientist is the stated
     mitigation for accepted risk R1, so this row is a security control.
@@ -178,7 +170,7 @@ def test_matrix_create_model_is_denied_to_ml_engineer(client, people):
 
 
 @pytest.mark.django_db
-def test_matrix_ml_engineer_cannot_create_a_model_by_post(client, people):
+def test_matrix_analyst_cannot_create_a_model_by_post(client, people):
     """Verified at the data layer, not just the response code."""
     before = MLModel.objects.count()
     client.force_login(people["engineer"])
@@ -193,7 +185,7 @@ def test_matrix_ml_engineer_cannot_create_a_model_by_post(client, people):
         )
     except PermissionDenied:
         pass
-    assert MLModel.objects.count() == before, "an ML Engineer created a model"
+    assert MLModel.objects.count() == before, "an Analyst created a model"
 
 
 # ── Row: Upload model version — Admin + Data Scientist with MANAGE ────

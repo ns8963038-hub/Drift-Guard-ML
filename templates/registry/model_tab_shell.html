@@ -13,6 +13,7 @@
         </div>
         <div style="display: flex; gap: 0.5rem;">
             <a href="{% url 'registry:edit' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Edit Model</a>
+            <a href="{% url 'registry:train' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Train Model</a>
             <a href="{% url 'datasets:baseline_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">Upload Baseline</a>
             <a href="{% url 'registry:version_upload' ml_model.slug %}" class="btn btn-secondary" style="font-size: 0.875rem;">+ Version</a>
             <a href="{% url 'datasets:batch_upload' ml_model.slug %}" class="btn btn-primary" style="font-size: 0.875rem;">Upload Batch</a>

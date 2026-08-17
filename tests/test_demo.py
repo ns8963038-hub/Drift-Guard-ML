@@ -33,9 +33,7 @@ def demo(churn_model):
     ml_model, version, owner = churn_model
 
     admin = User.objects.create_user(username="admin", password="p", role=Role.ADMIN)
-    engineer = User.objects.create_user(
-        username="eng", password="p", role=Role.ML_ENGINEER
-    )
+    engineer = User.objects.create_user(username="eng", password="p", role=Role.ANALYST)
     ModelAccess.objects.create(
         user=engineer, ml_model=ml_model, permission=Permission.VIEW
     )

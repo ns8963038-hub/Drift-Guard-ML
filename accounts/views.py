@@ -111,7 +111,7 @@ def user_create_edit_view(request, user_id=None):
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
         email = request.POST.get("email", "").strip()
-        role = request.POST.get("role", Role.ML_ENGINEER)
+        role = request.POST.get("role", Role.ANALYST)
         is_active = request.POST.get("is_active") == "on"
         password = request.POST.get("password", "")
 

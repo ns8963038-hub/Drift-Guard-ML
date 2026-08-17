@@ -8,7 +8,7 @@ from core.constants import Role, ProblemType, VersionStatus, ValidationStatus
 @pytest.mark.django_db
 def test_version_comparison_and_csv_export(client):
     user = User.objects.create_user(
-        username="compuser", password="p", role=Role.ML_ENGINEER
+        username="compuser", password="p", role=Role.ANALYST
     )
     client.login(username="compuser", password="p")
 

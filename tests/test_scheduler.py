@@ -181,15 +181,13 @@ def test_status_endpoint_reports_live_position(client, scenario):
     assert payload["phase"]
 
 
-def test_ml_engineer_cannot_manage_scenarios(client, scenario):
+def test_analyst_cannot_manage_scenarios(client, scenario):
     """PRD §5.2 — configuring the feed is a Data Scientist decision."""
     from accounts.models import ModelAccess, User
     from core.constants import Permission, Role
     from django.core.exceptions import PermissionDenied
 
-    engineer = User.objects.create_user(
-        username="eng", password="p", role=Role.ML_ENGINEER
-    )
+    engineer = User.objects.create_user(username="eng", password="p", role=Role.ANALYST)
     ModelAccess.objects.create(
         user=engineer, ml_model=scenario.ml_model, permission=Permission.VIEW
     )

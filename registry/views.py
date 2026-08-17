@@ -12,6 +12,10 @@ from accounts.models import ModelAccess
 from core.constants import ProblemType, Permission
 from core.mixins import visible_models, role_required, model_permission_required
 from core.constants import Role
+from core.validators import (
+    validate_dataset_file_extension,
+    validate_dataset_file_size,
+)
 
 
 @login_required
@@ -369,3 +373,62 @@ def history_csv_export_view(request, slug):
     )
 
     return response
+
+
+@login_required
+@role_required(Role.DATA_SCIENTIST)
+@model_permission_required(Permission.MANAGE)
+def model_train_view(request, slug):
+    """Train a model from a dataset — the synopsis' "Train Model" use case.
+
+    One upload sets the model up completely: it trains the classifier, records
+    its baseline accuracy, registers it as a version and makes the training
+    split the baseline that monitoring compares against.
+    """
+    from registry.training import ALGORITHMS, train_and_register
+
+    ml_model = get_object_or_404(visible_models(request.user), slug=slug)
+
+    if request.method == "POST":
+        upload = request.FILES.get("dataset")
+        if upload is None:
+            messages.error(request, "Choose a CSV file to train on.")
+            return redirect("registry:train", slug=slug)
+
+        try:
+            validate_dataset_file_extension(upload)
+            validate_dataset_file_size(upload)
+            version, metrics = train_and_register(
+                ml_model,
+                upload,
+                algorithm_key=request.POST.get("algorithm", "logistic_regression"),
+                target_column=request.POST.get("target_column")
+                or ml_model.target_column,
+                user=request.user,
+                test_size=float(request.POST.get("test_size", 0.25)),
+            )
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("registry:train", slug=slug)
+
+        messages.success(
+            request,
+            f"{metrics['algorithm']} trained and activated as {version.label}. "
+            f"Baseline accuracy {metrics['accuracy']:.4f}, "
+            f"precision {metrics['precision']:.4f}, recall {metrics['recall']:.4f} "
+            f"on {metrics['test_rows']:,} held-out rows.",
+        )
+        return redirect("registry:overview", slug=slug)
+
+    return render(
+        request,
+        "registry/model_train.html",
+        {
+            "ml_model": ml_model,
+            "algorithms": [
+                {"key": key, **{k: v for k, v in spec.items() if k != "build"}}
+                for key, spec in ALGORITHMS.items()
+            ],
+            "tab": "versions",
+        },
+    )

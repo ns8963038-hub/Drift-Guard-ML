@@ -9,7 +9,7 @@ from core.constants import Role, ProblemType, AlertCategory, AlertSeverity, Aler
 
 @pytest.mark.django_db
 def test_threshold_resolution_fallback():
-    user = User.objects.create_user(username="u", password="p", role=Role.ML_ENGINEER)
+    user = User.objects.create_user(username="u", password="p", role=Role.ANALYST)
     model = MLModel.objects.create(
         name="M1",
         slug="m1",
@@ -62,7 +62,7 @@ def test_moderate_band_sits_below_high_band():
 
 @pytest.mark.django_db
 def test_alert_deduplication_cooldown():
-    user = User.objects.create_user(username="u2", password="p", role=Role.ML_ENGINEER)
+    user = User.objects.create_user(username="u2", password="p", role=Role.ANALYST)
     model = MLModel.objects.create(
         name="M2",
         slug="m2",
@@ -92,7 +92,7 @@ def test_alert_deduplication_cooldown():
 @pytest.mark.django_db
 def test_email_failure_swallowed():
     user = User.objects.create_user(
-        username="u3", password="p", role=Role.ML_ENGINEER, email="u3@example.com"
+        username="u3", password="p", role=Role.ANALYST, email="u3@example.com"
     )
     model = MLModel.objects.create(
         name="M3",

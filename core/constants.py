@@ -4,7 +4,7 @@ from django.db import models
 class Role(models.TextChoices):
     ADMIN = "ADMIN", "Admin"
     DATA_SCIENTIST = "DATA_SCIENTIST", "Data Scientist"
-    ML_ENGINEER = "ML_ENGINEER", "ML Engineer"
+    ANALYST = "ANALYST", "Analyst"
 
 
 class Permission(models.TextChoices):

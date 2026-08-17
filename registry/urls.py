@@ -9,6 +9,7 @@ urlpatterns = [
     path("<slug:slug>/", views.model_overview_view, name="overview"),
     path("<slug:slug>/edit/", views.model_create_edit_view, name="edit"),
     path("<slug:slug>/versions/", views.model_versions_view, name="versions"),
+    path("<slug:slug>/train/", views.model_train_view, name="train"),
     path(
         "<slug:slug>/versions/new/",
         views.model_version_upload_view,

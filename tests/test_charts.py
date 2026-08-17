@@ -98,9 +98,7 @@ def test_charts_respect_model_access(client, model_with_runs):
     from core.constants import Role
 
     ml_model, _ = model_with_runs
-    outsider = User.objects.create_user(
-        username="out", password="p", role=Role.ML_ENGINEER
-    )
+    outsider = User.objects.create_user(username="out", password="p", role=Role.ANALYST)
     client.force_login(outsider)
 
     response = client.get(reverse("dashboard:chart_health_trend", args=[ml_model.slug]))

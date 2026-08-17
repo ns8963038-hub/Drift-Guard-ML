@@ -9,7 +9,7 @@ from core.constants import Role, VersionStatus, ProblemType, ValidationStatus
 
 @pytest.mark.django_db
 def test_create_model_and_audit(client):
-    # Data Scientist, not ML Engineer. PRD §5.2 forbids an ML Engineer from
+    # Data Scientist, not Analyst. PRD §5.2 forbids an Analyst from
     # creating models; this test previously used one and asserted success,
     # which locked the missing role check in as expected behaviour.
     user = User.objects.create_user(
@@ -41,7 +41,7 @@ def test_create_model_and_audit(client):
 
 @pytest.mark.django_db
 def test_validation_gate_rejects_corrupt_file(client):
-    user = User.objects.create_user(username="dev", password="p", role=Role.ML_ENGINEER)
+    user = User.objects.create_user(username="dev", password="p", role=Role.ANALYST)
     model = MLModel.objects.create(
         name="Test Model",
         slug="test-model",
@@ -62,9 +62,7 @@ def test_validation_gate_rejects_corrupt_file(client):
 
 @pytest.mark.django_db
 def test_version_activation_single_active_constraint(client):
-    user = User.objects.create_user(
-        username="dev2", password="p", role=Role.ML_ENGINEER
-    )
+    user = User.objects.create_user(username="dev2", password="p", role=Role.ANALYST)
     model = MLModel.objects.create(
         name="Model X",
         slug="model-x",

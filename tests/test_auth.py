@@ -8,7 +8,7 @@ from core.constants import Role, LoginEvent
 @pytest.mark.django_db
 def test_login_success(client):
     User.objects.create_user(
-        username="testuser", password="password123", role=Role.ML_ENGINEER
+        username="testuser", password="password123", role=Role.ANALYST
     )
     url = reverse("accounts:login")
     response = client.post(url, {"username": "testuser", "password": "password123"})
@@ -25,7 +25,7 @@ def test_login_success(client):
 @pytest.mark.django_db
 def test_login_failed_lockout(client):
     user = User.objects.create_user(
-        username="lockoutuser", password="password123", role=Role.ML_ENGINEER
+        username="lockoutuser", password="password123", role=Role.ANALYST
     )
     url = reverse("accounts:login")
 
@@ -55,7 +55,7 @@ def test_login_failed_lockout(client):
 @pytest.mark.django_db
 def test_logout(client):
     User.objects.create_user(
-        username="logoutuser", password="password123", role=Role.ML_ENGINEER
+        username="logoutuser", password="password123", role=Role.ANALYST
     )
     client.login(username="logoutuser", password="password123")
     url = reverse("accounts:logout")

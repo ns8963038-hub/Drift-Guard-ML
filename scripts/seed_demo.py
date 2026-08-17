@@ -50,7 +50,7 @@ PASSWORD = "driftguard123"
 USERS = [
     ("admin", Role.ADMIN, "Priya (Admin)"),
     ("dsci", Role.DATA_SCIENTIST, "Arun (Data Scientist)"),
-    ("mleng", Role.ML_ENGINEER, "Sana (ML Engineer)"),
+    ("mleng", Role.ANALYST, "Sana (Analyst)"),
 ]
 
 MODELS = {
@@ -232,7 +232,7 @@ def generate_history(scenario, count):
 def seed_access(users, models):
     """Deliberately asymmetric, so RBAC can be demonstrated rather than claimed.
 
-    The ML Engineer is granted Churn and denied Income. During the demo, opening
+    The Analyst is granted Churn and denied Income. During the demo, opening
     the Income URL as that user returns 404 — access control that can be *shown*,
     not just asserted in a slide.
     """

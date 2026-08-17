@@ -4,9 +4,7 @@ from core.constants import Role, Permission, LoginEvent
 
 
 class User(AbstractUser):
-    role = models.CharField(
-        max_length=20, choices=Role.choices, default=Role.ML_ENGINEER
-    )
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.ANALYST)
     failed_login_count = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
 
@@ -16,8 +14,8 @@ class User(AbstractUser):
     def is_data_scientist(self):
         return self.role == Role.DATA_SCIENTIST
 
-    def is_ml_engineer(self):
-        return self.role == Role.ML_ENGINEER
+    def is_analyst(self):
+        return self.role == Role.ANALYST
 
 
 class LoginActivity(models.Model):

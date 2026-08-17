@@ -98,9 +98,7 @@ def test_runs_of_an_ungranted_model_are_unreachable(client, run_with_drift):
     from accounts.models import User
 
     run, _, _ = run_with_drift
-    outsider = User.objects.create_user(
-        username="out", password="p", role=Role.ML_ENGINEER
-    )
+    outsider = User.objects.create_user(username="out", password="p", role=Role.ANALYST)
     client.force_login(outsider)
 
     assert (
@@ -120,15 +118,13 @@ def test_batch_upload_screen_lists_required_columns(client, churn_model):
     assert "rejected rather than partly processed" in body
 
 
-def test_ml_engineer_can_upload_a_batch_but_not_a_baseline(client, churn_model):
-    """PRD §5.2 — feeding production data in is the ML Engineer's job; defining
+def test_analyst_can_upload_a_batch_but_not_a_baseline(client, churn_model):
+    """PRD §5.2 — feeding production data in is the Analyst's job; defining
     the reference the model is judged against is not."""
     from accounts.models import User, ModelAccess
 
     ml_model, _, owner = churn_model
-    engineer = User.objects.create_user(
-        username="eng", password="p", role=Role.ML_ENGINEER
-    )
+    engineer = User.objects.create_user(username="eng", password="p", role=Role.ANALYST)
     ModelAccess.objects.create(
         user=engineer, ml_model=ml_model, permission=Permission.VIEW
     )

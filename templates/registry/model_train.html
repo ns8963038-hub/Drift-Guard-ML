@@ -1,0 +1,57 @@
+{% extends "registry/model_tab_shell.html" %}
+{% block tab_content %}
+<div class="card">
+  <h2>Train a model</h2>
+  <p class="muted">
+    Upload historical data and the platform trains a classifier on it, reports
+    baseline accuracy, precision and recall on a held-out portion, and registers
+    the result as a new version.
+  </p>
+  <p class="muted tiny">
+    The training split also becomes the baseline that monitoring compares
+    against. A model has to be judged against the data it was actually trained
+    on, so both come from this one upload.
+  </p>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="grid-2">
+      <label>Historical dataset (CSV)
+        <input type="file" name="dataset" accept=".csv" required>
+      </label>
+      <label>Target column
+        <input type="text" name="target_column" value="{{ ml_model.target_column }}" required>
+      </label>
+      <label>Held-out portion
+        <select name="test_size">
+          <option value="0.2">20% — more training data</option>
+          <option value="0.25" selected>25% — balanced</option>
+          <option value="0.3">30% — more reliable metrics</option>
+        </select>
+      </label>
+    </div>
+
+    <h3>Algorithm</h3>
+    <div class="algorithm-list">
+      {% for algo in algorithms %}
+      <label class="algorithm-option">
+        <input type="radio" name="algorithm" value="{{ algo.key }}" {% if forloop.first %}checked{% endif %}>
+        <span>
+          <strong>{{ algo.label }}</strong>
+          <span class="muted tiny">{{ algo.note }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <p class="muted tiny">
+      All four are CPU-only and train in seconds on a laptop. Identifier and
+      constant columns are detected and excluded automatically; the rest are
+      scaled or one-hot encoded inside the model, so the artifact accepts raw
+      CSV columns afterwards.
+    </p>
+
+    <button type="submit" class="btn btn-primary">Train and activate</button>
+  </form>
+</div>
+{% endblock %}
