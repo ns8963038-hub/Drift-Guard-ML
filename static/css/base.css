@@ -49,3 +49,46 @@ a:hover {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-color);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Responsive — UIUX_DESIGN.md §3
+   The sidebar was a fixed 260px at every width, so below about 900px the
+   content column collapsed to a strip and every word wrapped. It also
+   squeezed chart canvases down to a few pixels wide.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Tablet: narrow the sidebar and tighten padding. */
+@media (max-width: 1024px) {
+  .sidebar { width: 200px; padding: 1rem; }
+  .main-content { padding: 1.25rem; }
+}
+
+/* Phone: the sidebar becomes a horizontal strip above the content, so the
+   content gets the full width. A drawer would be nicer, but this needs no
+   JavaScript and therefore cannot break during a demo. */
+@media (max-width: 768px) {
+  .layout-wrapper { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+  }
+  .sidebar nav {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    gap: 0.4rem !important;
+  }
+  .sidebar nav a { flex: 1 1 auto; text-align: center; font-size: 0.8125rem; }
+  /* The theme toggle sits at the bottom of the sidebar via margin-top:auto,
+     which pushes it off on a horizontal strip. */
+  .sidebar > *:last-child { margin-top: 0.5rem !important; }
+  .main-content { padding: 1rem; }
+  .header-bar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .chart-container { height: 260px; }
+}
+
+@media (max-width: 420px) {
+  .stat-row { grid-template-columns: 1fr; }
+}

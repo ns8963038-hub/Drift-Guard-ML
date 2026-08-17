@@ -151,6 +151,7 @@ def category_shift(
     column: str,
     target_proportions: dict[str, float],
     rng: np.random.Generator,
+    pool: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Resample whole rows so `column` hits the target category mix.
 
@@ -163,6 +164,13 @@ def category_shift(
 
     Categories named in the plan but absent from the source rows cannot be
     sampled; their share is redistributed across the categories that do exist.
+
+    ``pool`` is the full holdout, and passing it is what keeps this honest. A
+    500-row batch drawn uniformly holds roughly 275 Month-to-month rows, so
+    reshaping it to a 90% target needs 450 and has no choice but to duplicate
+    175 of them — which the data-quality module then correctly counts, reporting
+    45% duplicates for a scenario that injected 5%. Drawing from the whole pool
+    instead means the rows exist to be drawn.
     """
     if not target_proportions:
         return df
@@ -171,9 +179,12 @@ def category_shift(
     if total == 0:
         return df
 
+    source_frame = pool if pool is not None and len(pool) > len(df) else df
     available = {
         category: group
-        for category, group in df.groupby(df[column].astype(str), sort=False)
+        for category, group in source_frame.groupby(
+            source_frame[column].astype(str), sort=False
+        )
     }
     usable = {c: p for c, p in target_proportions.items() if c in available and p > 0}
     if not usable:
@@ -188,7 +199,14 @@ def category_shift(
         if count <= 0:
             continue
         source = available[category]
-        indices = rng.choice(len(source), size=count, replace=True)
+        # Sample without replacement when the group is large enough. Sampling
+        # with replacement unconditionally meant that hitting a 90% target
+        # duplicated hundreds of rows, and the data-quality module correctly
+        # counted every one — so a scenario that injects 5% duplicates reported
+        # 45%, and the quality score took a 20-point penalty for an artefact of
+        # the simulator rather than a fault in the data.
+        replace = count > len(source)
+        indices = rng.choice(len(source), size=count, replace=replace)
         pieces.append(source.iloc[indices])
 
     if not pieces:
@@ -365,6 +383,7 @@ def apply_transformation(
     transformation: dict[str, Any],
     baseline_profile: dict[str, Any],
     rng: np.random.Generator,
+    pool: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Dispatch one transformation."""
     kind = transformation["type"]
@@ -392,6 +411,7 @@ def apply_transformation(
             transformation["column"],
             transformation.get("target_proportions", {}),
             rng,
+            pool=pool,
         )
     if kind == "missing_injection":
         return missing_injection(
@@ -450,8 +470,27 @@ def build_batch(
     batch = holdout.iloc[positions].reset_index(drop=True)
 
     phase = resolve_phase(drift_plan, batch_index)
-    for transformation in phase.get("transformations", []):
-        batch = apply_transformation(batch, transformation, baseline_profile, rng)
+    transformations = phase.get("transformations", [])
+
+    # category_shift is a *sampling* instruction, not a row edit: it decides
+    # which rows the batch is made of. So it runs first, against the full pool.
+    #
+    # Running it in declaration order instead meant it replaced the batch with
+    # freshly drawn rows and silently discarded every numeric transformation
+    # applied before it — a plan that shifted MonthlyCharges by 2.2σ and then
+    # changed the Contract mix ended up with the charges barely moved.
+    for transformation in transformations:
+        if transformation["type"] == "category_shift":
+            batch = apply_transformation(
+                batch, transformation, baseline_profile, rng, pool=holdout
+            )
+
+    for transformation in transformations:
+        if transformation["type"] == "category_shift":
+            continue
+        batch = apply_transformation(
+            batch, transformation, baseline_profile, rng, pool=holdout
+        )
 
     if not include_labels and target_column and target_column in batch.columns:
         batch = batch.drop(columns=[target_column])

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load monitoring_extras %}
 
 {% block header_title %}Dashboard ({{ user.get_role_display }}){% endblock %}
 
@@ -34,16 +35,44 @@
                 <a href="{% url 'registry:list' %}" style="font-size: 0.875rem;">View All Models &rarr;</a>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                {% for m in models %}
-                    <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h4 style="font-size: 1rem;"><a href="{% url 'registry:overview' m.slug %}">{{ m.name }}</a></h4>
-                            <p style="color: var(--text-secondary); font-size: 0.8rem;">Target: {{ m.target_column }} · Type: {{ m.get_problem_type_display }}</p>
+                {% for card in cards %}
+                    <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                            <div>
+                                <h4 style="font-size: 1rem;">
+                                    <a href="{% url 'registry:overview' card.model.slug %}">{{ card.model.name }}</a>
+                                </h4>
+                                <p class="muted tiny">
+                                    Target: <code>{{ card.model.target_column }}</code>
+                                    {% if card.version %}· {{ card.version.label }} active{% else %}· no active version{% endif %}
+                                </p>
+                            </div>
+                            {% if card.run %}
+                                {% status_badge card.run.health_band %}
+                            {% else %}
+                                <span class="badge badge-muted">– Not yet monitored</span>
+                            {% endif %}
                         </div>
-                        <span class="badge badge-healthy">HEALTHY</span>
+
+                        {% if card.run %}
+                        <div style="display:flex; gap:1.5rem; margin-top:0.75rem; align-items:center;">
+                            <span><strong style="font-size:1.25rem;">{{ card.run.health_score }}</strong><span class="muted tiny">/100</span></span>
+                            {% status_badge card.run.overall_drift_status %}
+                            <span class="muted tiny">{{ card.run.features_high }} high · {{ card.run.features_moderate }} moderate</span>
+                            <span class="muted tiny">{{ card.run.created_at|timesince }} ago</span>
+                        </div>
+                        <div class="meter" style="margin-top:0.5rem;"><span style="width:{{ card.run.health_score }}%"></span></div>
+                        {% else %}
+                        <p class="muted tiny" style="margin-top:0.5rem;">
+                            No monitoring runs yet — upload a batch or start the simulator.
+                        </p>
+                        {% endif %}
                     </div>
                 {% empty %}
-                    <p style="color: var(--text-secondary);">No models registered yet.</p>
+                    <p class="empty-state">
+                        <strong>No models yet.</strong><br>
+                        Create one to start monitoring.
+                    </p>
                 {% endfor %}
             </div>
         </div>

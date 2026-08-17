@@ -62,7 +62,7 @@
 <div class="card">
   <h3>How this health score was reached</h3>
   <p class="muted tiny">
-    Weighting: {{ weighting|cut:"_"|title }}.
+    Weighting: {{ weighting|underscores }}.
     {% if weighting == 'without_labels' %}
       This batch carried no ground truth, so the performance weight is redistributed
       across drift, quality and prediction stability rather than scored as zero.
@@ -192,7 +192,7 @@
     <table class="data-table">
       <tbody>
         {% for name, penalty in quality.penalties.items %}
-        <tr><td>{{ name|cut:"_"|title }}</td><td class="num">−{{ penalty|floatformat:2 }}</td></tr>
+        <tr><td>{{ name|underscores }}</td><td class="num">−{{ penalty|floatformat:2 }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

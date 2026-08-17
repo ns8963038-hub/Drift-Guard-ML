@@ -72,3 +72,16 @@ def pct(value, places=1):
 def split(value, separator=","):
     """Split a string in a template — used for inline filter option lists."""
     return str(value).split(separator)
+
+
+@register.filter
+def underscores(value):
+    """Turn a snake_case key into readable words.
+
+    `|cut:"_"|title` deletes the underscore instead of replacing it, so
+    "with_labels" came out as "Withlabels" and "type_mismatches" as
+    "Typemismatches" — visible on the run detail screen.
+    """
+    if value is None:
+        return ""
+    return str(value).replace("_", " ").capitalize()
