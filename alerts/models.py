@@ -81,9 +81,15 @@ class Alert(models.Model):
     ml_model = models.ForeignKey(
         "registry.MLModel", on_delete=models.CASCADE, related_name="alerts"
     )
-    # Plain integer until Track A's MonitoringRun exists; converted to a real
-    # foreign key in the same migration that introduces that table.
-    run_id = models.IntegerField(null=True, blank=True)
+    # A real foreign key now that MonitoringRun exists. Django names the column
+    # run_id either way, so `alert.run_id` keeps working for existing callers.
+    run = models.ForeignKey(
+        "monitoring.MonitoringRun",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="alerts",
+    )
     severity = models.CharField(max_length=20, choices=AlertSeverity.choices)
     category = models.CharField(max_length=20, choices=AlertCategory.choices)
     # Which §9.1 rule fired. Stored rather than inferred from the message, so
@@ -146,7 +152,13 @@ class RetrainRecommendation(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="retrain_recommendations",
     )
-    run_id = models.IntegerField(null=True, blank=True)
+    run = models.ForeignKey(
+        "monitoring.MonitoringRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retrain_recommendations",
+    )
     severity = models.CharField(max_length=20, choices=RetrainSeverity.choices)
     # Every trigger that fired, each with its measured value and threshold.
     # FR-10.2 requires the recommendation to name them, not just say "retrain".
