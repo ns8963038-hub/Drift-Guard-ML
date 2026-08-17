@@ -13,6 +13,10 @@
 > **Suhas — start here.** §2 is your reading list, §5 is the complete screen ownership map, §6 is
 > your work phase by phase, and **§7 is every single thing you depend on Nandan for**, including
 > how to stub each one so you are never blocked waiting.
+>
+> ⛔ **Before you run a single `startapp`:** `monitoring/` already exists and holds Track A's
+> engine. `startapp monitoring` will fail, and deleting the directory would destroy his work.
+> The correct commands are in **§6, Phase 0, task 1**. Read that box first.
 
 ---
 
@@ -184,6 +188,52 @@ logs/
 1. Django project + **all nine apps** created and registered in `INSTALLED_APPS`:
    `core`, `accounts`, `registry`, `datasets`, `monitoring`, `alerts`, `simulator`, `dashboard`,
    `apiv1` — create Nandan's apps too, empty. Five minutes, unblocks him immediately.
+
+   > ### ⛔ `startapp monitoring` WILL FAIL — read before you run it
+   >
+   > Track A started before Phase 0, so **`monitoring/` already exists** and contains the
+   > drift engine. `django-admin startapp` refuses to run on a non-empty directory:
+   >
+   > ```
+   > CommandError: '/path/to/ML PROJECT/monitoring' already exists
+   > ```
+   >
+   > This is expected, not a broken repo. **Do not delete the directory** — you would
+   > destroy Track A's work. Create the app files by hand instead:
+   >
+   > ```bash
+   > # These do not exist yet, so startapp is fine:
+   > python manage.py startapp core
+   > python manage.py startapp accounts
+   > python manage.py startapp registry
+   > python manage.py startapp datasets
+   > python manage.py startapp alerts
+   > python manage.py startapp simulator
+   > python manage.py startapp dashboard
+   > python manage.py startapp apiv1
+   >
+   > # monitoring/ exists already — hand-create only the Django app files:
+   > touch monitoring/models.py monitoring/admin.py monitoring/views.py
+   > mkdir -p monitoring/migrations && touch monitoring/migrations/__init__.py
+   > ```
+   >
+   > …then write `monitoring/apps.py`:
+   >
+   > ```python
+   > from django.apps import AppConfig
+   >
+   >
+   > class MonitoringConfig(AppConfig):
+   >     default_auto_field = "django.db.models.BigAutoField"
+   >     name = "monitoring"
+   > ```
+   >
+   > Register `monitoring` in `INSTALLED_APPS` like any other app. **Never touch
+   > `monitoring/engine/` — that is Track A's.**
+   >
+   > **General rule:** if any app directory already exists when you get to Phase 0,
+   > Track A got there first. Hand-create the Django files around it; never `startapp`
+   > over it and never delete it. Check with `ls` before each `startapp`.
 2. `core/models.py` → `TimeStampedModel` abstract base (`created_at`, `updated_at`).
 3. **`core/constants.py` — every enum in the system, defined once.** See §6.1. Both tracks import
    from here; a missing enum blocks Nandan.
