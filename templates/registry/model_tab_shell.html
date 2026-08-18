@@ -14,6 +14,7 @@
     {{ ml_model.get_problem_type_display }}
     {% if ml_model.positive_class %} · positive class <code>{{ ml_model.positive_class }}</code>{% endif %}
     {% if not ml_model.is_active %} · <span class="badge badge-muted">– Deactivated</span>{% endif %}
+    · {% access_chip ml_model user %}
   </p>
 {% endblock %}
 

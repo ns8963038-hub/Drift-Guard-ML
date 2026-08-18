@@ -22,14 +22,32 @@ from core.validators import (
 def model_list_view(request):
     models = visible_models(request.user).select_related("owner")
 
+    # What this user may do on each model. It was only ever visible to an
+    # administrator, buried in Access grants — so a Data Scientist and an
+    # Analyst saw an identical list and had no way to tell that one of them
+    # could configure these models and the other could only read them.
+    grants = dict(
+        ModelAccess.objects.filter(user=request.user).values_list(
+            "ml_model_id", "permission"
+        )
+    )
+
     # The list used to render name + description and a hardcoded "Active" badge.
     # Health, drift and the active version are the reason to open this screen at
     # all, so they are resolved here rather than left to a per-row template hit.
     rows = []
     for ml_model in models:
+        if request.user.is_admin():
+            access = "ADMIN"
+        elif ml_model.owner_id == request.user.pk:
+            access = "OWNER"
+        else:
+            access = grants.get(ml_model.pk, Permission.VIEW)
+
         rows.append(
             {
                 "model": ml_model,
+                "access": access,
                 "run": ml_model.runs.filter(status=RunStatus.COMPLETED)
                 .order_by("-created_at")
                 .first(),

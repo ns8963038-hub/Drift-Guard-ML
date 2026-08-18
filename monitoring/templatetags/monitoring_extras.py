@@ -104,3 +104,45 @@ def underscores(value):
     if value is None:
         return ""
     return str(value).replace("_", " ").capitalize()
+
+
+@register.simple_tag
+def access_chip(ml_model, user):
+    """What this user may do on this specific model.
+
+    Role alone does not answer the question: a Data Scientist has MANAGE on the
+    models they own and may hold only VIEW on someone else's. Without this the
+    Data Scientist and Analyst saw an identical model header and nothing on the
+    page said which of them could configure it.
+    """
+    if not user.is_authenticated:
+        return ""
+
+    if user.is_admin():
+        tone, label, hint = (
+            "secondary",
+            "Full access",
+            "Administrators reach every model",
+        )
+    elif ml_model.owner_id == user.pk:
+        tone, label, hint = "accent", "✎ You own this", "You created this model"
+    else:
+        from accounts.models import ModelAccess
+
+        grant = ModelAccess.objects.filter(user=user, ml_model=ml_model).first()
+        if grant and grant.permission == "MANAGE":
+            tone, label, hint = (
+                "accent",
+                "✎ Can configure",
+                "You may configure this model",
+            )
+        else:
+            tone, label, hint = (
+                "secondary",
+                "👁 Read only",
+                "You may read it and upload batches, but not configure it",
+            )
+
+    return format_html(
+        '<span class="badge badge-{}" title="{}">{}</span>', tone, hint, label
+    )

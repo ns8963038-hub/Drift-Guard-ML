@@ -43,6 +43,20 @@
 This badge was hardcoded to "Active" for every row, so a deactivated
                model looked exactly like a live one.
 {% endcomment %}
+            {% comment %}
+Your permission on this model. Without it a Data Scientist and an
+               Analyst saw an identical row and nothing said that one of them
+               could configure the model and the other could only read it.
+{% endcomment %}
+            {% if row.access == "ADMIN" %}
+              <span class="badge badge-secondary" title="Administrators can reach every model">Full access</span>
+            {% elif row.access == "OWNER" %}
+              <span class="badge badge-accent" title="You created this model">✎ You own this</span>
+            {% elif row.access == "MANAGE" %}
+              <span class="badge badge-accent" title="You can configure this model">✎ Can configure</span>
+            {% else %}
+              <span class="badge badge-secondary" title="You can read it and upload batches, but not configure it">👁 Read only</span>
+            {% endif %}
             {% if row.model.is_active %}
               <span class="badge badge-good">Active</span>
             {% else %}

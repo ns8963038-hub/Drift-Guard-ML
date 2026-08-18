@@ -381,3 +381,4 @@ input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visibl
 .trigger-list { margin: 0.5rem 0 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem; }
 .header-actions form { margin: 0; }
 .check-list { margin: 0.5rem 0 0 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8125rem; color: var(--text-secondary); }
+.badge-accent { background: var(--brand-subtle); color: var(--brand); border-color: rgba(79,70,229,.3); }

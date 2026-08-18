@@ -380,3 +380,53 @@ def test_rejected_user_form_keeps_what_was_typed(client):
     body = response.content.decode()
     assert 'value="clash"' in body
     assert 'value="keep@me.test"' in body
+
+
+@pytest.mark.django_db
+def test_model_screens_state_your_access_level(client):
+    """Role alone does not say what you may do on a *specific* model.
+
+    A Data Scientist and an Analyst saw an identical model list and an identical
+    model header, so nothing on either screen distinguished the account that can
+    configure a model from the one that can only read it.
+    """
+    from accounts.models import ModelAccess
+    from core.constants import Permission
+    from registry.models import MLModel
+
+    owner = User.objects.create_user(
+        username="owner1", password="p", role=Role.DATA_SCIENTIST
+    )
+    reader = User.objects.create_user(
+        username="reader1", password="p", role=Role.ANALYST
+    )
+    model = MLModel.objects.create(
+        name="Shared",
+        slug="shared",
+        target_column="t",
+        problem_type=ProblemType.BINARY,
+        owner=owner,
+    )
+    ModelAccess.objects.create(user=reader, ml_model=model, permission=Permission.VIEW)
+
+    client.login(username="owner1", password="p")
+    owner_list = client.get(reverse("registry:list")).content.decode()
+    owner_page = client.get(
+        reverse("registry:overview", args=[model.slug])
+    ).content.decode()
+    assert "You own this" in owner_list
+    assert "You own this" in owner_page
+
+    client.login(username="reader1", password="p")
+    reader_list = client.get(reverse("registry:list")).content.decode()
+    reader_page = client.get(
+        reverse("registry:overview", args=[model.slug])
+    ).content.decode()
+    assert "Read only" in reader_list
+    assert "Read only" in reader_page
+    assert "You own this" not in reader_list
+
+    # The administrator reaches it without any grant at all.
+    User.objects.create_user(username="boss1", password="p", role=Role.ADMIN)
+    client.login(username="boss1", password="p")
+    assert "Full access" in client.get(reverse("registry:list")).content.decode()
