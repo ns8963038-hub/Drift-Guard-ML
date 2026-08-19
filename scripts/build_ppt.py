@@ -389,7 +389,7 @@ def build():
                 "Language",
                 "Python 3.11 (Django 5.0 does not support Python 3.12 or later)",
             ],
-            ["Web framework", "Django 5.0.9, Django REST Framework 3.15.2"],
+            ["Web framework", "Django 5.0.9"],
             ["Machine learning", "scikit-learn 1.5.2, joblib 1.4.2"],
             ["Data and statistics", "pandas 2.2.3, NumPy 1.26.4, SciPy 1.13.1"],
             ["Scheduling", "APScheduler 3.10.4 (in-process)"],
@@ -416,7 +416,7 @@ def build():
             [
                 "Telco Customer Churn",
                 "7,043",
-                "20",
+                "19",
                 "4,225",
                 "1,409",
                 "1,409",
@@ -643,7 +643,7 @@ def build():
             "A REST ingestion endpoint with API-key authentication, allowing production systems to submit batches automatically rather than through file upload.",
             "Support for regression and multi-class problems; the present implementation targets binary classification.",
             "Migration to PostgreSQL and an external task queue, permitting multiple concurrent workers.",
-            "Email and webhook notification of alerts, extending the existing notification module.",
+            "Delivery of alert notifications by email and webhook; the email module is written but is not yet invoked by the alerting flow.",
             "Automated retraining pipelines, retained under explicit human approval.",
             "Drift detection for image and text data, which requires embedding-based rather than tabular measures.",
             "Root-cause analysis linking a detected drift to the upstream system or process that produced it.",
@@ -658,9 +658,13 @@ def build():
         [
             "DriftGuard addresses a failure mode that conventional software monitoring does not cover: a model that continues to operate normally while becoming progressively less correct.",
             "The platform detects drift using four complementary measures, assesses data quality, tracks performance, and reports a single interpretable health score with its components exposed.",
-            "Two design decisions distinguish it from a routine application of drift tests:",
-            "     magnitude determines the drift band while significance only confirms it, because a p-value reflects sample size rather than practical importance;",
-            "     a batch without ground truth is recorded as unknown rather than zero, which prevents systematic false alarms on healthy models.",
+            (
+                "Two design decisions distinguish it from a routine application of drift tests:",
+                [
+                    "magnitude determines the drift band while significance only confirms it, because a p-value reflects sample size rather than practical importance",
+                    "a batch without ground truth is recorded as unknown rather than zero, which prevents systematic false alarms on healthy models",
+                ],
+            ),
             "Role-based access control is enforced by the server rather than concealed in the interface, and is verified by automated tests that attempt forbidden operations directly by URL.",
             "The system was validated on two public datasets and a configurable drift simulator, with 343 automated tests passing.",
         ],

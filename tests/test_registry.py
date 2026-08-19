@@ -255,3 +255,27 @@ def test_activation_refusal_is_shown_as_a_message_not_a_500(client):
     )
     assert response.status_code == 200
     assert "failed validation" in response.content.decode()
+
+
+def test_upload_page_describes_the_real_validation_gate():
+    """The page listed five checks, two of which the gate does not perform.
+
+    It claimed the gate matches feature names and enforces a size limit. It does
+    neither: checks 4 and 5 compare output length and output classes, and size is
+    validated by the view before the gate runs.
+    """
+    from pathlib import Path
+
+    page = Path("templates/registry/version_upload.html").read_text()
+    gate = Path("registry/services.py").read_text()
+
+    # Anything the page promises must be something the gate actually does.
+    assert "joblib.load" in page and "joblib.load" in gate
+    assert "one prediction per row" in page
+    assert "len(predictions) != len(sample_df)" in gate
+    assert "class it predicts" in page
+    assert "issubset" in gate
+
+    # And it must not re-assert the two claims that were wrong.
+    assert "feature names match" not in page
+    assert "within the size limit" not in page

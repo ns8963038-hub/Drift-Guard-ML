@@ -48,12 +48,15 @@
       the moment it is asked to do the one thing it exists for.
     </p>
     <ol class="check-list">
-      <li>The file loads, and what comes out is a scikit-learn estimator.</li>
-      <li>It exposes <code>predict</code>.</li>
-      <li>It actually scores a sample drawn from this model's baseline.</li>
-      <li>Its expected feature names match the baseline's columns.</li>
-      <li>The file is within the size limit.</li>
+      <li>The file deserialises with <code>joblib.load</code>.</li>
+      <li>What comes out has a callable <code>predict</code>.</li>
+      <li>It scores 50 rows drawn from this model's baseline without raising.</li>
+      <li>It returns exactly one prediction per row it was given.</li>
+      <li>Every class it predicts is one the baseline's target actually contains.</li>
     </ol>
+    <p class="muted tiny">
+      File type and size are checked before the gate runs.
+    </p>
   </div>
 </div>
 {% endblock %}
