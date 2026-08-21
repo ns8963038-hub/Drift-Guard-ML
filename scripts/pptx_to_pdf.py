@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.enum.dml import MSO_FILL
 from pptx.util import Emu
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,11 +48,72 @@ def _runs_html(paragraph) -> str:
     return "".join(parts) or "&nbsp;"
 
 
+def _solid_fill(shape) -> str | None:
+    """The shape's solid fill as a CSS colour, or None if it has none.
+
+    Needed because a styled deck is mostly rectangles — a full-bleed title
+    ground, a spine, a number badge, an accent rule. Without this the converter
+    drew none of them, so white text on an indigo ground came out invisible.
+    """
+    try:
+        fill = shape.fill
+        if fill.type != MSO_FILL.SOLID:
+            return None
+        return f"#{fill.fore_color.rgb}"
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def slide_html(slide) -> str:
     out = []
     for shape in slide.shapes:
         left, top = _in(shape.left), _in(shape.top)
         width, height = _in(shape.width), _in(shape.height)
+
+        if shape.has_table:
+            cols = [_in(c.width) for c in shape.table.columns]
+            rows_html = []
+            for r, row in enumerate(shape.table.rows):
+                cells = []
+                for ci, cell in enumerate(row.cells):
+                    para = cell.text_frame.paragraphs[0]
+                    size, bold, colour = 12.0, False, "#000"
+                    if para.runs:
+                        run = para.runs[0]
+                        size = run.font.size.pt if run.font.size else 12
+                        bold = bool(run.font.bold)
+                        if run.font.color and run.font.color.type is not None:
+                            try:
+                                colour = f"#{run.font.color.rgb}"
+                            except (AttributeError, ValueError):
+                                pass
+                    bg = ""
+                    try:
+                        if cell.fill.type == MSO_FILL.SOLID:
+                            bg = f"background:#{cell.fill.fore_color.rgb};"
+                        elif cell.fill.type == MSO_FILL.BACKGROUND:
+                            bg = "background:#fff;"
+                    except (AttributeError, TypeError, ValueError):
+                        pass
+                    cells.append(
+                        f'<td style="width:{cols[ci]}in;font-size:{size}pt;'
+                        f'font-weight:{"700" if bold else "400"};color:{colour};{bg}">'
+                        f"{html.escape(cell.text)}</td>"
+                    )
+                rows_html.append("<tr>" + "".join(cells) + "</tr>")
+            out.append(
+                f'<table class="tbl" style="left:{left}in;top:{top}in;'
+                f'width:{sum(cols)}in">{"".join(rows_html)}</table>'
+            )
+            continue
+
+        # A filled rectangle: the title ground, the spine, a rule, a badge.
+        fill = _solid_fill(shape)
+        if fill:
+            out.append(
+                f'<div class="fill" style="left:{left}in;top:{top}in;'
+                f'width:{width}in;height:{height}in;background:{fill}"></div>'
+            )
 
         if shape.has_text_frame and shape.text_frame.text.strip():
             lines = []
@@ -67,42 +129,15 @@ def slide_html(slide) -> str:
                     f'margin-left:{indent}in;line-height:{spacing}">'
                     f"{_runs_html(para)}</div>"
                 )
+            # Text sitting on a filled shape is centred in it, as PowerPoint does.
+            extra = (
+                f"height:{height}in;display:flex;flex-direction:column;justify-content:center;"
+                if fill
+                else ""
+            )
             out.append(
                 f'<div class="tb" style="left:{left}in;top:{top}in;'
-                f'width:{width}in">{"".join(lines)}</div>'
-            )
-
-        elif shape.has_table:
-            cols = [_in(c.width) for c in shape.table.columns]
-            rows_html = []
-            for r, row in enumerate(shape.table.rows):
-                cells = []
-                for ci, cell in enumerate(row.cells):
-                    para = cell.text_frame.paragraphs[0]
-                    size = 12.0
-                    bold = False
-                    if para.runs:
-                        size = (
-                            para.runs[0].font.size.pt if para.runs[0].font.size else 12
-                        )
-                        bold = bool(para.runs[0].font.bold)
-                    head = "head" if r == 0 else ""
-                    cells.append(
-                        f'<td class="{head}" style="width:{cols[ci]}in;font-size:{size}pt;'
-                        f'font-weight:{"700" if bold else "400"}">'
-                        f"{html.escape(cell.text)}</td>"
-                    )
-                rows_html.append("<tr>" + "".join(cells) + "</tr>")
-            out.append(
-                f'<table class="tbl" style="left:{left}in;top:{top}in;'
-                f'width:{sum(cols)}in">{"".join(rows_html)}</table>'
-            )
-
-        elif shape.shape_type is not None and height < 0.06:
-            # The hairline rule under each heading.
-            out.append(
-                f'<div class="rule" style="left:{left}in;top:{top}in;'
-                f'width:{width}in;height:{max(height, 0.012)}in"></div>'
+                f'width:{width}in;{extra}">{"".join(lines)}</div>'
             )
 
     return f'<section class="slide">{"".join(out)}</section>'
@@ -125,10 +160,9 @@ def convert(src: Path, dest: Path) -> Path:
     background: #fff; overflow: hidden; page-break-after: always;
   }}
   .tb {{ position: absolute; }}
-  .rule {{ position: absolute; background: #000; }}
+  .fill {{ position: absolute; }}
   .tbl {{ position: absolute; border-collapse: collapse; }}
-  .tbl td {{ border: 0.5pt solid #d0d0d0; padding: 5pt 7pt; vertical-align: top; color: #000; }}
-  .tbl td.head {{ background: #000; color: #fff; }}
+  .tbl td {{ border: 0.5pt solid #dcdce4; padding: 5pt 7pt; vertical-align: top; }}
 </style>
 {body}"""
 

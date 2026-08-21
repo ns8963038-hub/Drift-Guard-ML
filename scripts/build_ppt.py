@@ -571,7 +571,7 @@ def build():
     )
     note(
         s,
-        "Approximately 15,600 lines of Python across 115 files, 32 templates, and 343 automated tests in 23 test modules. "
+        "Approximately 15,600 lines of Python across 115 files, 32 templates, and 344 automated tests in 23 test modules. "
         "The analytical engine is about 2,000 lines and imports no Django.",
     )
 
@@ -606,7 +606,7 @@ def build():
             "This demonstrates why accuracy alone is an inadequate criterion, and why the platform records several measures.",
             "Drift detection on a shifted batch: 3 features at high drift, 3 moderate, 13 stable, out of 19 monitored. Contract recorded PSI 0.721 against a 0.25 threshold, with the share of month-to-month contracts rising from 54.5% to 90.1%.",
             "Composite health score of 70/100, banded Warning, with drift contributing 37/100 and quality 92/100.",
-            "343 automated tests pass, covering the statistical engine, the permission matrix, ingestion and error handling.",
+            "344 automated tests pass, covering the statistical engine, the permission matrix, ingestion and error handling.",
         ],
         top=Inches(4.0),
         size=14,
@@ -662,7 +662,7 @@ def build():
                 ],
             ),
             "Role-based access control is enforced by the server rather than concealed in the interface, and is verified by automated tests that attempt forbidden operations directly by URL.",
-            "The system was validated on two public datasets and a configurable drift simulator, with 343 automated tests passing.",
+            "The system was validated on two public datasets and a configurable drift simulator, with 344 automated tests passing.",
         ],
         size=15.5,
     )
