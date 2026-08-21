@@ -125,27 +125,23 @@ def table(slide, headers, rows, top=BODY_TOP, col_widths=None, size=12.5):
         for i, w in enumerate(col_widths):
             tbl.columns[i].width = Inches(11.633 * w / total)
 
-    for col, text in enumerate(headers):
-        cell = tbl.cell(0, col)
-        cell.text = text
+    def _style(cell, text, bold, fill):
+        cell.text = str(text)
         para = cell.text_frame.paragraphs[0]
-        para.runs[0].font.size = Pt(size)
-        para.runs[0].font.bold = True
-        para.runs[0].font.color.rgb = WHITE
-        para.runs[0].font.name = FONT
+        run = para.runs[0] if para.runs else para.add_run()
+        run.font.size = Pt(size)
+        run.font.bold = bold
+        run.font.color.rgb = WHITE if bold else BLACK
+        run.font.name = FONT
         cell.fill.solid()
-        cell.fill.fore_color.rgb = BLACK
+        cell.fill.fore_color.rgb = fill
+
+    for col, text in enumerate(headers):
+        _style(tbl.cell(0, col), text, True, BLACK)
 
     for r, row in enumerate(rows, start=1):
         for c, text in enumerate(row):
-            cell = tbl.cell(r, c)
-            cell.text = str(text)
-            para = cell.text_frame.paragraphs[0]
-            para.runs[0].font.size = Pt(size)
-            para.runs[0].font.color.rgb = BLACK
-            para.runs[0].font.name = FONT
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = WHITE
+            _style(tbl.cell(r, c), text, False, WHITE)
     return tbl
 
 
